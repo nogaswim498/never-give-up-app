@@ -1,6 +1,6 @@
 from fastapi import FastAPI  
 from fastapi.responses import FileResponse  
-from fastapi.staticfiles import StaticFiles # 追加  
+from fastapi.staticfiles import StaticFiles  
 from pydantic import BaseModel  
 from fastapi.middleware.cors import CORSMiddleware  
 import core_engine  
@@ -8,7 +8,6 @@ import os
   
 app = FastAPI(title="Never!諦めない案内 API")  
   
-# スマホアプリ等、外部からのアクセスを許可する設定  
 app.add_middleware(  
     CORSMiddleware,  
     allow_origins=["*"],  
@@ -22,49 +21,44 @@ class SearchRequest(BaseModel):
     target_station: str  
     current_time: str  
   
-# --- ここを変更: 個別のファイルを配信する設定を追加 ---  
+# --- ここを変更: ファイルの種類(media_type)を明示する ---  
   
-# トップページ  
 @app.get("/")  
 def read_root():  
-    return FileResponse("index.html")  
+    return FileResponse("index.html", media_type="text/html")  
   
-# PWA用の設定ファイル  
 @app.get("/manifest.json")  
 def read_manifest():  
-    return FileResponse("manifest.json")  
+    # スマホに「これはアプリ設定ファイルです」と伝える  
+    return FileResponse("manifest.json", media_type="application/manifest+json")  
   
-# サービスワーカー  
 @app.get("/sw.js")  
 def read_sw():  
-    return FileResponse("sw.js")  
+    # スマホに「これはプログラムです」と伝える  
+    return FileResponse("sw.js", media_type="application/javascript")  
   
-# アイコン画像  
 @app.get("/icon.png")  
 def read_icon():  
     if os.path.exists("icon.png"):  
-        return FileResponse("icon.png")  
+        return FileResponse("icon.png", media_type="image/png")  
     return {"error": "icon.png not found"}  
   
-# ついでにログのエラーを消すためのfavicon  
 @app.get("/favicon.ico")  
 def read_favicon():  
     if os.path.exists("icon.png"):  
-        return FileResponse("icon.png") # icon.pngで代用  
-    return FileResponse("index.html") # 無ければとりあえずHTML返しとく  
+        return FileResponse("icon.png", media_type="image/png")  
+    return FileResponse("index.html")  
   
 # ---------------------------------------------------  
   
 @app.post("/search")  
 def search_route(req: SearchRequest):  
-    # 1. 探索エンジンを実行  
     results = core_engine.search_routes(  
         req.start_station,   
         req.target_station,   
         req.current_time  
     )  
       
-    # 2. 結果を判定  
     is_reachable = False  
     best_candidate = None  
       
