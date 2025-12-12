@@ -1,0 +1,194 @@
+<!DOCTYPE html>  
+<html lang="ja">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>Never!諦めない案内</title>  
+    <style>  
+        /* --- Yahoo!乗換案内風のデザイン定義 --- */  
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif; background-color: #f2f2f2; color: #333; }  
+          
+        /* ヘッダー */  
+        .header { background-color: #ffffff; padding: 12px; text-align: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }  
+        .app-title { font-weight: bold; color: #2ecc71; font-size: 18px; }  
+  
+        /* 入力エリア */  
+        .search-box { background: #fff; padding: 16px; margin-bottom: 10px; }  
+        .input-row { display: flex; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }  
+        .input-label { width: 60px; font-weight: bold; font-size: 14px; color: #666; }  
+        .input-field { flex: 1; border: none; font-size: 16px; outline: none; }  
+          
+        /* 検索ボタン */  
+        .search-btn { background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }  
+        .search-btn:active { background-color: #e67e22; }  
+  
+        /* 結果リスト */  
+        .result-container { display: none; /* 最初は隠す */ padding: 10px; }  
+        .warning-msg { background-color: #ffebee; color: #d32f2f; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 14px; border: 1px solid #ffcdd2; font-weight: bold;}  
+          
+        .route-card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 5px solid #2ecc71; }  
+        .route-card.limit { border-left-color: #fa8a28; } /* 終電逃し用カラー */  
+  
+        .card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }  
+        .station-name { font-size: 20px; font-weight: bold; }  
+        .arrival-time { font-size: 24px; font-weight: bold; color: #333; }  
+          
+        .info-row { display: flex; gap: 10px; font-size: 12px; color: #666; margin-bottom: 10px; }  
+        .badge { background: #eee; padding: 2px 6px; border-radius: 3px; }  
+  
+        .detail-link { color: #1976d2; text-decoration: none; font-size: 14px; display: block; text-align: right; margin-top: 10px; }  
+  
+        /* タイムライン (簡易) */  
+        .timeline { margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; }  
+        .tl-item { display: flex; font-size: 14px; margin-bottom: 8px; }  
+        .tl-time { width: 45px; font-weight: bold; text-align: right; padding-right: 10px; color: #333; }  
+        .tl-line { width: 2px; background: #ccc; position: relative; margin: 0 10px; }  
+        .tl-dot { width: 10px; height: 10px; background: #fff; border: 3px solid #fa8a28; border-radius: 50%; position: absolute; left: -7px; top: 0; }  
+        .tl-content { flex: 1; }  
+        .dashed { border-left: 2px dashed #999; width: 0; background: none; } /* タクシー区間 */  
+          
+        .taxi-info { color: #555; font-size: 13px; background: #f9f9f9; padding: 8px; border-radius: 4px; margin-top: 4px; }  
+  
+    </style>  
+</head>  
+<body>  
+  
+    <!-- ヘッダー -->  
+    <div class="header">  
+        <div class="app-title">Never!諦めない案内</div>  
+    </div>  
+  
+    <!-- 検索フォーム -->  
+    <div class="search-box">  
+        <div class="input-row">  
+            <span class="input-label">出発</span>  
+            <input type="text" id="startStation" class="input-field" value="Shibuya">  
+        </div>  
+        <div class="input-row">  
+            <span class="input-label">到着</span>  
+            <input type="text" id="targetStation" class="input-field" value="Yokohama">  
+        </div>  
+        <div class="input-row">  
+            <span class="input-label">日時</span>  
+            <input type="text" id="currentTime" class="input-field" value="24:40">  
+        </div>  
+        <button class="search-btn" onclick="searchRoute()">検索</button>  
+    </div>  
+  
+    <!-- 結果表示エリア -->  
+    <div id="resultArea" class="result-container">  
+        <!-- Javascriptでここに結果を挿入します -->  
+    </div>  
+  
+    <script>  
+        async function searchRoute() {  
+            const start = document.getElementById('startStation').value;  
+            const target = document.getElementById('targetStation').value;  
+            const time = document.getElementById('currentTime').value;  
+            const resultArea = document.getElementById('resultArea');  
+  
+            // ローディング表示  
+            resultArea.style.display = 'block';  
+            resultArea.innerHTML = '<div style="text-align:center; padding:20px;">検索中...</div>';  
+  
+            try {  
+                // 作ったAPIサーバーを呼び出す  
+                const response = await fetch('http://192.168.3.4:8000/search', {  
+                    method: 'POST',  
+                    headers: { 'Content-Type': 'application/json' },  
+                    body: JSON.stringify({  
+                        start_station: start,  
+                        target_station: target,  
+                        current_time: time  
+                    })  
+                });  
+  
+                const data = await response.json();  
+                renderResults(data);  
+  
+            } catch (error) {  
+                resultArea.innerHTML = '<div style="color:red; padding:20px;">エラー: サーバーが起動していないようです。<br>uvicorn main:app --reload を実行していますか？</div>';  
+                console.error(error);  
+            }  
+        }  
+  
+        function renderResults(data) {  
+            const container = document.getElementById('resultArea');  
+            container.innerHTML = ''; // クリア  
+  
+            if (!data.candidates || data.candidates.length === 0) {  
+                container.innerHTML = '<div style="padding:20px;">ルートが見つかりませんでした。</div>';  
+                return;  
+            }  
+  
+            // メッセージ表示  
+            if (!data.is_target_reachable) {  
+                const msg = document.createElement('div');  
+                msg.className = 'warning-msg';  
+                msg.innerText = `⚠️ 目的地「${data.search_condition.target}」までは到達できません。\n行けるところまでのルートを表示します。`;  
+                container.appendChild(msg);  
+            }  
+  
+            // 候補リストを表示 (上位3つ)  
+            data.candidates.slice(0, 3).forEach((route, index) => {  
+                const card = document.createElement('div');  
+                card.className = 'route-card' + (data.is_target_reachable ? '' : ' limit');  
+  
+                // タクシー概算 (1km 300円 + 初乗り500円 と仮定)  
+                const taxiPrice = Math.round(route.distance_to_target_km * 300 + 500);  
+                const taxiPriceStr = taxiPrice.toLocaleString();  
+  
+                const html = `  
+                    <div class="card-header">  
+                        <div class="station-name">${route.station} <span style="font-size:14px; font-weight:normal">着</span></div>  
+                        <div class="arrival-time">${route.arrival_time}</div>  
+                    </div>  
+                    <div class="info-row">  
+                        <span class="badge">乗換 ${route.route_count - 1}回</span>  
+                        <span class="badge" style="background:#fff3e0; color:#e65100">目的地まで ${route.distance_to_target_km} km</span>  
+                    </div>  
+                      
+                    <!-- タイムライン詳細 -->  
+                    <div class="timeline">  
+                        <div class="tl-item">  
+                            <div class="tl-time">${data.search_condition.time}</div>  
+                            <div class="tl-line"><div class="tl-dot"></div></div>  
+                            <div class="tl-content">${data.search_condition.start}</div>  
+                        </div>  
+                        <div class="tl-item">  
+                            <div class="tl-time">↓</div>  
+                            <div class="tl-line"></div>  
+                            <div class="tl-content" style="color:#888; font-size:12px; padding-top:2px;">(電車移動)</div>  
+                        </div>  
+                        <div class="tl-item">  
+                            <div class="tl-time">${route.arrival_time}</div>  
+                            <div class="tl-line"><div class="tl-dot"></div></div>  
+                            <div class="tl-content"><strong>${route.station}</strong> <span style="color:red; font-size:12px; font-weight:bold;">(ここまで)</span></div>  
+                        </div>  
+                          
+                        <!-- ここからタクシー案内 -->  
+                        <div class="tl-item">  
+                            <div class="tl-time"></div>  
+                            <div class="tl-line dashed"></div>  
+                            <div class="tl-content">  
+                                <div class="taxi-info">  
+                                    🚕 ここからはタクシー・徒歩<br>  
+                                    予想料金: 約${taxiPriceStr}円<br>  
+                                    <a href="#" style="color:#1976d2;">Goアプリで呼ぶ</a>  
+                                </div>  
+                            </div>  
+                        </div>  
+                        <div class="tl-item">  
+                            <div class="tl-time">--:--</div>  
+                            <div class="tl-line"><div class="tl-dot" style="border-color:#ccc;"></div></div>  
+                            <div class="tl-content" style="color:#aaa;">${data.search_condition.target} (目的地)</div>  
+                        </div>  
+                    </div>  
+                `;  
+                card.innerHTML = html;  
+                container.appendChild(card);  
+            });  
+        }  
+    </script>  
+</body>  
+</html>  

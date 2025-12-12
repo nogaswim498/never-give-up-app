@@ -1,0 +1,15 @@
+stop_id,stop_name,stop_lat,stop_lon
+Shibuya,渋谷,35.658,139.7016
+Nakameguro,中目黒,35.6442,139.6989
+Jiyugaoka,自由が丘,35.6072,139.6687
+Musashi-Kosugi,武蔵小杉,35.5768,139.6596
+Hiyoshi,日吉,35.5544,139.6469
+Kikuna,菊名,35.5097,139.6304
+Yokohama,横浜,35.4657,139.6223
+Motomachi,元町・中華街,35.4429,139.6498
+Sangen-Jaya,三軒茶屋,35.6433,139.6702
+Futako-Tamagawa,二子玉川,35.6116,139.6265
+Mizonokuchi,溝の口,35.5999,139.6105
+Saginuma,鷺沼,35.5794,139.5731
+Nagatsuta,長津田,35.5317,139.495
+Chuo-Rinkan,中央林間,35.5074,139.4443
