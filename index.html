@@ -93,7 +93,7 @@
   
             try {  
                 // 作ったAPIサーバーを呼び出す  
-                const response = await fetch('http://192.168.3.4:8000/search', {  
+                const response = await fetch('/search', {    
                     method: 'POST',  
                     headers: { 'Content-Type': 'application/json' },  
                     body: JSON.stringify({  
