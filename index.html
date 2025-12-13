@@ -181,24 +181,32 @@
     </div>  
   
     <script>  
+        // Service Workerの登録  
         if ('serviceWorker' in navigator) {  
-            navigator.serviceWorker.register('sw.js');  
+            navigator.serviceWorker.register('sw.js').catch(function(err) {  
+                console.log('SW registration failed: ', err);  
+            });  
         }  
   
+        // --- 初期化 ---  
         window.onload = function() {  
             setNow();   
             loadHomeData();  
+              
             // 画面のどこかをタップしたらサジェストを消す  
             document.addEventListener('click', function(e) {  
                 if (!e.target.closest('.input-row')) {  
-                    document.getElementById('startSuggest').style.display = 'none';  
-                    document.getElementById('targetSuggest').style.display = 'none';  
+                    const s = document.getElementById('startSuggest');  
+                    const t = document.getElementById('targetSuggest');  
+                    if(s) s.style.display = 'none';  
+                    if(t) t.style.display = 'none';  
                 }  
             });  
         };  
   
         let homeCoords = null;  
   
+        // --- 現在日時セット関数 ---  
         function setNow() {  
             const now = new Date();  
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());  
@@ -212,58 +220,81 @@
             }  
         }  
   
-        // --- サジェスト機能 (HeartRails Express API) ---  
+        // ============================================================  
+        // ★ここが重要修正ポイント: JSONP方式によるサジェスト機能★  
+        // ============================================================  
         let suggestTimer = null;  
+        let currentListId = null;   // どのリストを更新するか  
+        let currentInputId = null;  // どの入力欄か  
   
-        async function suggestStation(inputElement, listId) {  
+        function suggestStation(inputElement, listId) {  
             const keyword = inputElement.value;  
-            // デバッグ1: そもそも関数が呼ばれているか確認  
-            // alert("入力検知: " + keyword);   
+            const listElement = document.getElementById(listId);  
   
-            if (keyword.length < 2) return;  
-  
-            try {  
-                const url = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}`;  
-                  
-                // デバッグ2: 通信直前  
-                console.log("通信開始: " + url);  
-  
-                const res = await fetch(url);  
-                const data = await res.json();  
-  
-                // デバッグ3: データが取れたか  
-                // alert("データ取得成功: " + JSON.stringify(data).substring(0, 50));  
-  
-                const listElement = document.getElementById(listId);  
-                if (data.response && data.response.station) {  
-                    renderSuggestList(data.response.station, listElement, inputElement);  
-                } else {  
-                    listElement.style.display = 'none';  
-                }  
-            } catch (e) {  
-                // ★ここでエラー内容が表示されます  
-                alert("エラー発生: " + e);  
+            // 2文字未満ならリストを隠して終了  
+            if (keyword.length < 2) {  
+                listElement.style.display = 'none';  
+                return;  
             }  
+  
+            // 連打防止タイマー  
+            clearTimeout(suggestTimer);  
+            suggestTimer = setTimeout(() => {  
+                // コールバック関数で使うためにIDを記憶  
+                currentListId = listId;  
+                currentInputId = inputElement.id;  
+  
+                // 既存のJSONPスクリプトがあれば削除  
+                const oldScript = document.getElementById('jsonp_script');  
+                if (oldScript) oldScript.remove();  
+  
+                // 新しいスクリプトタグを作成 (これがfetchの代わりになる)  
+                const script = document.createElement('script');  
+                script.id = 'jsonp_script';  
+                // URLの末尾に &jsonp=receiveStations をつけるのがルール  
+                script.src = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}&jsonp=receiveStations`;  
+                document.body.appendChild(script);  
+            }, 300);  
         }  
-          
+  
+        // APIからデータが届くと、自動的にこの関数が実行されます  
+        window.receiveStations = function(data) {  
+            const listElement = document.getElementById(currentListId);  
+            const inputElement = document.getElementById(currentInputId);  
+              
+            if (!listElement || !inputElement) return;  
+  
+            if (data.response && data.response.station) {  
+                renderSuggestList(data.response.station, listElement, inputElement);  
+            } else {  
+                listElement.style.display = 'none';  
+            }  
+        };  
+  
         function renderSuggestList(stations, listElement, inputElement) {  
             listElement.innerHTML = '';  
-            // 同じ駅名が複数路線である場合があるので重複除外するか、路線名を表示する  
-            // ここでは路線名付きで表示  
+            // 重複排除セット  
+            const seen = new Set();  
+              
             stations.forEach(st => {  
+                const uniqueKey = st.name + st.line;  
+                if (seen.has(uniqueKey)) return;  
+                seen.add(uniqueKey);  
+  
                 const div = document.createElement('div');  
                 div.className = 'suggest-item';  
-                div.innerHTML = `${st.name} <span>(${st.line})</span>`;  
+                div.innerHTML = `${st.name} <span style="font-size:10px; color:#999;">(${st.line})</span>`;  
                   
                 div.onclick = function() {  
-                    // クリックしたら入力欄にセット  
-                    inputElement.value = st.name; // シンプルに駅名だけセット  
-                    listElement.style.display = 'none';  
+                    inputElement.value = st.name; // 駅名をセット  
+                    listElement.style.display = 'none'; // リストを消す  
                 };  
                 listElement.appendChild(div);  
             });  
             listElement.style.display = 'block';  
         }  
+  
+        // ============================================================  
   
         // --- 設定・自宅登録 ---  
   
@@ -425,5 +456,6 @@
             });  
         }  
     </script>  
+
 </body>  
 </html>  
