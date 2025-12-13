@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import math  
 import urllib.parse  
 import time  
+import re  # 正規表現ライブラリを追加  
   
 # === 1. 駅位置データの読み込み ===  
 print("📂 Loading station data...")  
@@ -25,12 +26,9 @@ except:
     print("❌ Error: data/stops.txt not found.")  
     station_coords = {}  
   
-# === 2. Yahoo!乗換案内 スクレイピング ===  
+# === 2. Yahoo!乗換案内 スクレイピング (修正版) ===  
   
 def fetch_yahoo_route(start, goal, dt):  
-    """  
-    Yahoo!乗換案内をスクレイピングして、指定時刻に経路があるか判定する  
-    """  
     base_url = "https://transit.yahoo.co.jp/search/print"  
     params = {  
         "from": start,  
@@ -48,35 +46,41 @@ def fetch_yahoo_route(start, goal, dt):
     }  
       
     try:  
-        # 少しウェイトを入れる（連続アクセス対策）  
-        time.sleep(0.5)  
-          
+        time.sleep(0.5) # アクセス負荷軽減  
         res = requests.get(base_url, params=params, timeout=5)  
         if res.status_code != 200: return None  
           
         soup = BeautifulSoup(res.text, 'html.parser')  
           
-        # 経路があるか  
+        # 経路サマリー取得  
         summary = soup.find("div", class_="routeSummary")  
         if not summary: return None  
   
-        # 時間チェック  
+        # 時間取得  
         time_li = summary.find("li", class_="time")  
         if not time_li: return None  
           
-        time_text = time_li.text # "23:58発 → 00:29着"  
-        times = time_text.replace("発", "").replace("着", "").split("→")  
-        dep_str = times[0].strip()  
-        arr_str = times[1].strip()  
+        time_text = time_li.text # 例: "23:58発 → 00:29着(31分)"  
+          
+        # ★修正: 正規表現で時刻(HH:MM)を2つ抜き出す  
+        # \d{1,2}:\d{2} というパターンを探す  
+        times = re.findall(r'(\d{1,2}:\d{2})', time_text)  
+          
+        if len(times) < 2: return None # 出発と到着が取れなかったらエラー  
+          
+        dep_str = times[0] # 出発時刻  
+        arr_str = times[1] # 到着時刻  
           
         # 乗換回数  
         transfer_li = summary.find("li", class_="transfer")  
         transfers = 0  
         if transfer_li:  
-            t_text = transfer_li.text.replace("乗換：", "").replace("回", "").strip()  
-            if t_text.isdigit(): transfers = int(t_text)  
+            t_text = transfer_li.text  
+            # 数字だけ抜き出す  
+            nums = re.findall(r'\d+', t_text)  
+            if nums: transfers = int(nums[0])  
   
-        # 深夜判定 (検索時刻より大幅に未来＝翌朝ならNG)  
+        # 深夜判定  
         dep_h = int(dep_str.split(':')[0])  
         req_h = dt.hour  
           
@@ -114,10 +118,9 @@ def calculate_taxi_fare(km):
         fare += math.ceil(((road_km * 1000) - 1096) / 255) * 100  
     return round(fare * 1.2 * 1.1, -1)  
   
-# === 4. 探索ロジック (Binary Search) ===  
+# === 4. 探索ロジック ===  
   
 def search_routes(start_name, current_time_str, target_name=None, target_lat=None, target_lon=None):  
-    # 1. 座標特定  
     start_coords = station_coords.get(start_name)  
     target_coords = None  
     if target_lat: target_coords = {"lat": target_lat, "lon": target_lon}  
@@ -126,7 +129,6 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
     if not start_coords or not target_coords:  
         return {"error": "駅の場所が特定できません。"}  
   
-    # 2. 日時設定  
     now = datetime.now()  
     try:  
         h, m = map(int, current_time_str.split(':'))  
@@ -140,7 +142,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
   
     print(f"🔎 Solving: {start_name} -> {target_name or 'Home'} @ {search_dt}")  
   
-    # 3. 候補駅の抽出 (直線上の駅)  
+    # 候補抽出  
     candidates = []  
     total_dist = haversine_distance(start_coords, target_coords)  
       
@@ -149,7 +151,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
         d_from_start = haversine_distance(start_coords, coords)  
         d_to_goal = haversine_distance(coords, target_coords)  
           
-        # 楕円判定 (経路上にある駅)  
+        # 楕円判定 (直進性チェック)  
         if (d_from_start + d_to_goal) < total_dist * 1.3:  
             candidates.append({  
                 "name": name,  
@@ -157,35 +159,30 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
                 "dist_goal": d_to_goal  
             })  
               
-    # ★重要: 二分探索のために「出発地に近い順（距離昇順）」にソートする  
+    # 出発地から近い順にソート  
     candidates.sort(key=lambda x: x["dist_start"])  
       
-    # 駅が多すぎると処理しきれないので、最大15駅程度に間引く  
+    # 最大15駅に絞る  
     if len(candidates) > 15:  
         step = len(candidates) // 15  
         candidates = candidates[::step]  
           
-    print(f"  Target Stations ({len(candidates)}): {[c['name'] for c in candidates]}")  
+    print(f"  Target Stations: {[c['name'] for c in candidates]}")  
   
-    # === 4. 二分探索 (Binary Search) ===  
-    # left = 近い駅, right = 遠い駅  
-    # 「行ける」なら right(遠く) へ、「行けない」なら left(手前) へ  
-      
+    # 二分探索  
     left = 0  
     right = len(candidates) - 1  
-    best_station = None # 行ける中で一番遠い駅  
+    best_station = None  
       
     while left <= right:  
         mid = (left + right) // 2  
         target_cand = candidates[mid]  
           
         print(f"  Checking: {target_cand['name']} ... ", end="")  
-          
         res = fetch_yahoo_route(start_name, target_cand['name'], search_dt)  
           
         if res:  
-            print("OK (Go Further) ✅")  
-            # 行けた！ これを暫定一位にして、もっと遠くを目指す  
+            print("OK ✅")  
             best_station = {  
                 "station": target_cand['name'],  
                 "res": res,  
@@ -193,25 +190,22 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
             }  
             left = mid + 1  
         else:  
-            print("NG (Pull Back) ❌")  
-            # 行けない。もっと手前を探す  
+            print("NG ❌")  
             right = mid - 1  
   
     results = []  
       
     if best_station:  
-        # 限界駅  
         price = calculate_taxi_fare(best_station['dist'])  
         results.append({  
             "station": best_station['station'],  
-            "arrival_time": best_station['res']['arr'],  
+            "arrival_time": best_station['res']['arr'], # これで純粋な時刻だけになる  
             "distance_to_target_km": round(best_station['dist'], 2),  
             "route_count": best_station['res']['transfers'] + 1,  
             "taxi_price": price,  
             "last_stop_id": "LIMIT"  
         })  
     else:  
-        # 一歩も動けない  
         results.append({  
             "station": start_name,  
             "arrival_time": "移動不可",  
