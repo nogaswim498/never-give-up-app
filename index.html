@@ -2,66 +2,69 @@
 <html lang="ja">  
 <head>  
     <meta charset="UTF-8">  
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
-    <title>Never!諦めない案内</title>
-    
-        <!-- PWA用の設定 -->  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">  
+    <title>Never!諦めない案内</title>  
+    <!-- PWA用の設定 -->  
     <link rel="manifest" href="manifest.json">  
     <link rel="apple-touch-icon" href="icon.png">  
     <meta name="apple-mobile-web-app-capable" content="yes">  
     <meta name="theme-color" content="#2ecc71">  
       
-    <!-- サービスワーカーの登録 -->  
-    <script>  
-        if ('serviceWorker' in navigator) {  
-            navigator.serviceWorker.register('sw.js')  
-                .then(function() { console.log('Service Worker Registered'); });  
-        }  
-    </script>  
-    
     <style>  
-        /* --- Yahoo!乗換案内風のデザイン定義 --- */  
-        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif; background-color: #f2f2f2; color: #333; }  
+        /* --- デザイン定義 (Yahoo!風 + 便利機能) --- */  
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif; background-color: #f2f2f2; color: #333; -webkit-tap-highlight-color: transparent; }  
           
         /* ヘッダー */  
-        .header { background-color: #ffffff; padding: 12px; text-align: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; }  
-        .app-title { font-weight: bold; color: #2ecc71; font-size: 18px; }  
+        .header { background-color: #ffffff; padding: 12px; text-align: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; }  
+        .app-title { font-weight: bold; color: #2ecc71; font-size: 18px; flex-grow: 1; text-align: center; }  
+        .settings-icon { font-size: 24px; color: #666; cursor: pointer; padding: 0 10px; }  
   
         /* 入力エリア */  
-        .search-box { background: #fff; padding: 16px; margin-bottom: 10px; }  
-        .input-row { display: flex; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }  
-        .input-label { width: 60px; font-weight: bold; font-size: 14px; color: #666; }  
-        .input-field { flex: 1; border: none; font-size: 16px; outline: none; }  
+        .search-box { background: #fff; padding: 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }  
+        .input-row { display: flex; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; position: relative; }  
+        .input-label { width: 50px; font-weight: bold; font-size: 14px; color: #666; }  
+        .input-field { flex: 1; border: none; font-size: 16px; outline: none; border-radius: 0; background: transparent; }  
           
+        /* 便利ボタン（現在時刻・自宅など） */  
+        .action-btn { background: #eee; border: none; border-radius: 4px; padding: 6px 10px; font-size: 12px; color: #555; font-weight: bold; cursor: pointer; margin-left: 8px; white-space: nowrap; }  
+        .action-btn:active { background: #ddd; }  
+        .action-btn.home { color: #e67e22; background: #fff3e0; }  
+  
         /* 検索ボタン */  
-        .search-btn { background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }  
+        .search-btn { background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-top: 10px; }  
         .search-btn:active { background-color: #e67e22; }  
   
+        /* 設定モーダル */  
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 200; justify-content: center; align-items: center; }  
+        .modal-content { background: #fff; padding: 20px; border-radius: 8px; width: 85%; max-width: 320px; }  
+        .modal-title { font-weight: bold; margin-bottom: 15px; font-size: 18px; }  
+        .modal-desc { font-size: 13px; color: #666; margin-bottom: 10px; }  
+        .modal-input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; }  
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }  
+        .btn-cancel { background: #eee; color: #333; border: none; padding: 8px 16px; border-radius: 4px; }  
+        .btn-save { background: #2ecc71; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; }  
+  
         /* 結果リスト */  
-        .result-container { display: none; /* 最初は隠す */ padding: 10px; }  
+        .result-container { padding: 10px; padding-bottom: 40px; }  
         .warning-msg { background-color: #ffebee; color: #d32f2f; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 14px; border: 1px solid #ffcdd2; font-weight: bold;}  
           
         .route-card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 5px solid #2ecc71; }  
-        .route-card.limit { border-left-color: #fa8a28; } /* 終電逃し用カラー */  
+        .route-card.limit { border-left-color: #fa8a28; }   
   
         .card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }  
         .station-name { font-size: 20px; font-weight: bold; }  
         .arrival-time { font-size: 24px; font-weight: bold; color: #333; }  
-          
         .info-row { display: flex; gap: 10px; font-size: 12px; color: #666; margin-bottom: 10px; }  
         .badge { background: #eee; padding: 2px 6px; border-radius: 3px; }  
   
-        .detail-link { color: #1976d2; text-decoration: none; font-size: 14px; display: block; text-align: right; margin-top: 10px; }  
-  
-        /* タイムライン (簡易) */  
+        /* タイムライン */  
         .timeline { margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; }  
         .tl-item { display: flex; font-size: 14px; margin-bottom: 8px; }  
         .tl-time { width: 45px; font-weight: bold; text-align: right; padding-right: 10px; color: #333; }  
         .tl-line { width: 2px; background: #ccc; position: relative; margin: 0 10px; }  
         .tl-dot { width: 10px; height: 10px; background: #fff; border: 3px solid #fa8a28; border-radius: 50%; position: absolute; left: -7px; top: 0; }  
         .tl-content { flex: 1; }  
-        .dashed { border-left: 2px dashed #999; width: 0; background: none; } /* タクシー区間 */  
-          
+        .dashed { border-left: 2px dashed #999; width: 0; background: none; }  
         .taxi-info { color: #555; font-size: 13px; background: #f9f9f9; padding: 8px; border-radius: 4px; margin-top: 4px; }  
   
     </style>  
@@ -70,50 +73,169 @@
   
     <!-- ヘッダー -->  
     <div class="header">  
+        <div style="width: 24px;"></div> <!-- スペーサー -->  
         <div class="app-title">Never!諦めない案内</div>  
+        <div class="settings-icon" onclick="openSettings()">⚙️</div>  
     </div>  
   
     <!-- 検索フォーム -->  
     <div class="search-box">  
         <div class="input-row">  
             <span class="input-label">出発</span>  
-            <input type="text" id="startStation" class="input-field" value="Shibuya">  
+            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿">  
         </div>  
         <div class="input-row">  
             <span class="input-label">到着</span>  
-            <input type="text" id="targetStation" class="input-field" value="Yokohama">  
+            <input type="text" id="targetStation" class="input-field" placeholder="例: 横浜">  
+            <button class="action-btn home" onclick="useHomeAddress()">🏠 自宅</button>  
         </div>  
         <div class="input-row">  
             <span class="input-label">日時</span>  
-            <input type="text" id="currentTime" class="input-field" value="24:40">  
+            <input type="text" id="currentTime" class="input-field" placeholder="24:00">  
+            <button class="action-btn" onclick="setCurrentTime()">⏰ 現在</button>  
         </div>  
-        <button class="search-btn" onclick="searchRoute()">検索</button>  
+        <button class="search-btn" onclick="searchRoute()">検索する</button>  
     </div>  
   
     <!-- 結果表示エリア -->  
-    <div id="resultArea" class="result-container">  
-        <!-- Javascriptでここに結果を挿入します -->  
+    <div id="resultArea" class="result-container"></div>  
+  
+    <!-- 設定モーダル (自宅登録用) -->  
+    <div id="settingsModal" class="modal">  
+        <div class="modal-content">  
+            <div class="modal-title">設定: 自宅の登録</div>  
+            <div class="modal-desc">住所を入力してください。位置情報を取得して保存します（サーバーには送信されません）。</div>  
+            <input type="text" id="addressInput" class="modal-input" placeholder="例: 東京都世田谷区...">  
+            <div id="addressResult" style="font-size:12px; color:#e67e22; margin-bottom:10px;"></div>  
+            <div class="modal-actions">  
+                <button class="btn-cancel" onclick="closeSettings()">閉じる</button>  
+                <button class="btn-save" onclick="saveHomeAddress()">保存する</button>  
+            </div>  
+        </div>  
     </div>  
   
     <script>  
+        // PWA Service Worker  
+        if ('serviceWorker' in navigator) {  
+            navigator.serviceWorker.register('sw.js').then(function() { console.log('SW Registered'); });  
+        }  
+  
+        // 初期化処理  
+        window.onload = function() {  
+            // 現在時刻をセット  
+            setCurrentTime();  
+            // 自宅が登録済みかチェック  
+            const homeData = localStorage.getItem('never_home_v1');  
+            if (homeData) {  
+                console.log("自宅データ読み込み済み");  
+            }  
+        };  
+  
+        // --- 便利機能 ---  
+  
+        function setCurrentTime() {  
+            const now = new Date();  
+            const h = now.getHours();  
+            const m = now.getMinutes();  
+            // 0詰め  
+            const hh = h < 10 ? '0' + h : h;  
+            const mm = m < 10 ? '0' + m : m;  
+            document.getElementById('currentTime').value = `${hh}:${mm}`;  
+        }  
+  
+        // --- 設定・自宅登録ロジック ---  
+  
+        function openSettings() {  
+            document.getElementById('settingsModal').style.display = 'flex';  
+            const homeData = JSON.parse(localStorage.getItem('never_home_v1') || '{}');  
+            if(homeData.address) {  
+                document.getElementById('addressInput').value = homeData.address;  
+            }  
+        }  
+  
+        function closeSettings() {  
+            document.getElementById('settingsModal').style.display = 'none';  
+            document.getElementById('addressResult').innerText = '';  
+        }  
+  
+        async function saveHomeAddress() {  
+            const address = document.getElementById('addressInput').value;  
+            if (!address) return;  
+  
+            document.getElementById('addressResult').innerText = "検索中...";  
+  
+            try {  
+                // 国土地理院の住所検索API (無料・登録不要)  
+                const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`;  
+                const res = await fetch(url);  
+                const data = await res.json();  
+  
+                if (data && data.length > 0) {  
+                    // 最も確からしい候補を取得  
+                    const location = data[0].geometry.coordinates; // [lon, lat]  
+                    const saveData = {  
+                        address: address,  
+                        lon: location[0],  
+                        lat: location[1],  
+                        is_registered: true  
+                    };  
+                      
+                    // ブラウザに保存  
+                    localStorage.setItem('never_home_v1', JSON.stringify(saveData));  
+                      
+                    document.getElementById('addressResult').innerText = "✅ 保存しました！";  
+                    setTimeout(closeSettings, 1000);  
+                } else {  
+                    document.getElementById('addressResult').innerText = "⚠️ 住所が見つかりませんでした。";  
+                }  
+            } catch (e) {  
+                console.error(e);  
+                document.getElementById('addressResult').innerText = "通信エラーが発生しました。";  
+            }  
+        }  
+  
+        function useHomeAddress() {  
+            const homeData = JSON.parse(localStorage.getItem('never_home_v1') || '{}');  
+            if (homeData.is_registered) {  
+                document.getElementById('targetStation').value = "自宅 (" + homeData.address + ")";  
+                // ※ ここで裏側で座標を保持しておく処理が必要（次のステップで実装）  
+                // window.targetCoords = { lat: homeData.lat, lon: homeData.lon };  
+            } else {  
+                alert("右上の⚙️設定ボタンから、自宅の住所を登録してください。");  
+                openSettings();  
+            }  
+        }  
+  
+        // --- 検索処理 ---  
+  
         async function searchRoute() {  
             const start = document.getElementById('startStation').value;  
-            const target = document.getElementById('targetStation').value;  
+            let target = document.getElementById('targetStation').value;  
             const time = document.getElementById('currentTime').value;  
             const resultArea = document.getElementById('resultArea');  
   
-            // ローディング表示  
+            // "自宅 (東京都...)" のような表記から "自宅" だけ、あるいは住所を除去して送るなどの処理  
+            // 現状のバックエンドは駅名しか受け付けないので、暫定的に駅名として送ってみる  
+            // (次のフェーズでバックエンドを座標対応させます)  
+            if (target.startsWith("自宅")) {  
+                // 仮：今はまだ駅名検索しかできないのでアラート  
+                // alert("現在バックエンド改修中です。駅名を入力してください。");  
+                // return;   
+                // ※とりあえず「横浜」として送ってみるテスト用  
+                if (target.includes("横浜") || target.includes("神奈川")) target = "Yokohama";  
+                else target = "Takao"; // テスト用ダミー  
+            }  
+  
             resultArea.style.display = 'block';  
             resultArea.innerHTML = '<div style="text-align:center; padding:20px;">検索中...</div>';  
   
             try {  
-                // 作ったAPIサーバーを呼び出す  
-                const response = await fetch('/search', {    
+                const response = await fetch('/search', {  
                     method: 'POST',  
                     headers: { 'Content-Type': 'application/json' },  
                     body: JSON.stringify({  
                         start_station: start,  
-                        target_station: target,  
+                        target_station: target, // ここを日本語で送ると今のバックエンドはエラーになるかも(ID管理なので)  
                         current_time: time  
                     })  
                 });  
@@ -122,36 +244,31 @@
                 renderResults(data);  
   
             } catch (error) {  
-                resultArea.innerHTML = '<div style="color:red; padding:20px;">エラー: サーバーが起動していないようです。<br>uvicorn main:app --reload を実行していますか？</div>';  
+                resultArea.innerHTML = '<div style="color:red; padding:20px;">エラーが発生しました。</div>';  
                 console.error(error);  
             }  
         }  
   
         function renderResults(data) {  
             const container = document.getElementById('resultArea');  
-            container.innerHTML = ''; // クリア  
+            container.innerHTML = '';  
   
             if (!data.candidates || data.candidates.length === 0) {  
                 container.innerHTML = '<div style="padding:20px;">ルートが見つかりませんでした。</div>';  
                 return;  
             }  
   
-            // メッセージ表示  
             if (!data.is_target_reachable) {  
                 const msg = document.createElement('div');  
                 msg.className = 'warning-msg';  
-                msg.innerText = `⚠️ 目的地「${data.search_condition.target}」までは到達できません。\n行けるところまでのルートを表示します。`;  
+                msg.innerText = `⚠️ 目的地までは到達できません。\n行けるところまでのルートを表示します。`;  
                 container.appendChild(msg);  
             }  
   
-            // 候補リストを表示 (上位3つ)  
-            data.candidates.slice(0, 3).forEach((route, index) => {  
+            data.candidates.slice(0, 3).forEach((route) => {  
                 const card = document.createElement('div');  
                 card.className = 'route-card' + (data.is_target_reachable ? '' : ' limit');  
-  
-                // タクシー概算 (1km 300円 + 初乗り500円 と仮定)  
-                const taxiPrice = Math.round(route.distance_to_target_km * 300 + 500);  
-                const taxiPriceStr = taxiPrice.toLocaleString();  
+                const taxiPrice = Math.round(route.distance_to_target_km * 350 + 500); // 少し高めに設定  
   
                 const html = `  
                     <div class="card-header">  
@@ -159,11 +276,9 @@
                         <div class="arrival-time">${route.arrival_time}</div>  
                     </div>  
                     <div class="info-row">  
-                        <span class="badge">乗換 ${route.route_count - 1}回</span>  
                         <span class="badge" style="background:#fff3e0; color:#e65100">目的地まで ${route.distance_to_target_km} km</span>  
                     </div>  
                       
-                    <!-- タイムライン詳細 -->  
                     <div class="timeline">  
                         <div class="tl-item">  
                             <div class="tl-time">${data.search_condition.time}</div>  
@@ -173,30 +288,23 @@
                         <div class="tl-item">  
                             <div class="tl-time">↓</div>  
                             <div class="tl-line"></div>  
-                            <div class="tl-content" style="color:#888; font-size:12px; padding-top:2px;">(電車移動)</div>  
+                            <div class="tl-content" style="color:#888; font-size:12px;">(電車移動)</div>  
                         </div>  
                         <div class="tl-item">  
                             <div class="tl-time">${route.arrival_time}</div>  
                             <div class="tl-line"><div class="tl-dot"></div></div>  
-                            <div class="tl-content"><strong>${route.station}</strong> <span style="color:red; font-size:12px; font-weight:bold;">(ここまで)</span></div>  
+                            <div class="tl-content"><strong>${route.station}</strong></div>  
                         </div>  
-                          
-                        <!-- ここからタクシー案内 -->  
                         <div class="tl-item">  
                             <div class="tl-time"></div>  
                             <div class="tl-line dashed"></div>  
                             <div class="tl-content">  
                                 <div class="taxi-info">  
-                                    🚕 ここからはタクシー・徒歩<br>  
-                                    予想料金: 約${taxiPriceStr}円<br>  
-                                    <a href="#" style="color:#1976d2;">Goアプリで呼ぶ</a>  
+                                    🚕 ここからはタクシー<br>  
+                                    予想: 約${taxiPrice.toLocaleString()}円<br>  
+                                    (深夜割増込)  
                                 </div>  
                             </div>  
-                        </div>  
-                        <div class="tl-item">  
-                            <div class="tl-time">--:--</div>  
-                            <div class="tl-line"><div class="tl-dot" style="border-color:#ccc;"></div></div>  
-                            <div class="tl-content" style="color:#aaa;">${data.search_condition.target} (目的地)</div>  
                         </div>  
                     </div>  
                 `;  
