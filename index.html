@@ -4,45 +4,113 @@
     <meta charset="UTF-8">  
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">  
     <title>Never!諦めない案内</title>  
-    <!-- PWA用の設定 -->  
+      
+    <!-- PWA設定 -->  
     <link rel="manifest" href="manifest.json">  
     <link rel="apple-touch-icon" href="icon.png">  
     <meta name="apple-mobile-web-app-capable" content="yes">  
     <meta name="theme-color" content="#2ecc71">  
       
     <style>  
-        /* --- デザイン定義 (Yahoo!風 + 便利機能) --- */  
-        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif; background-color: #f2f2f2; color: #333; -webkit-tap-highlight-color: transparent; }  
+        /* === デザイン定義 === */  
+        body {   
+            margin: 0;   
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;   
+            background-color: #f2f2f2;   
+            color: #333;   
+            -webkit-tap-highlight-color: transparent;   
+        }  
           
         /* ヘッダー */  
-        .header { background-color: #ffffff; padding: 12px; text-align: center; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; }  
+        .header {   
+            background-color: #ffffff;   
+            padding: 12px;   
+            border-bottom: 1px solid #ddd;   
+            position: sticky;   
+            top: 0;   
+            z-index: 100;   
+            display: flex;   
+            justify-content: space-between;   
+            align-items: center;   
+            height: 44px;  
+        }  
         .app-title { font-weight: bold; color: #2ecc71; font-size: 18px; flex-grow: 1; text-align: center; }  
-        .settings-icon { font-size: 24px; color: #666; cursor: pointer; padding: 0 10px; }  
+        .settings-icon { font-size: 24px; color: #666; cursor: pointer; padding: 0 15px; }  
   
         /* 入力エリア */  
-        .search-box { background: #fff; padding: 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }  
-        .input-row { display: flex; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; position: relative; }  
+        .search-box {   
+            background: #fff;   
+            padding: 16px;   
+            margin-bottom: 10px;   
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);   
+            position: relative; /* サジェスト表示用 */  
+        }  
+        .input-row {   
+            display: flex;   
+            align-items: center;   
+            margin-bottom: 12px;   
+            border-bottom: 1px solid #eee;   
+            padding-bottom: 8px;   
+            position: relative;   
+        }  
         .input-label { width: 50px; font-weight: bold; font-size: 14px; color: #666; }  
-        .input-field { flex: 1; border: none; font-size: 16px; outline: none; border-radius: 0; background: transparent; }  
+        .input-field {   
+            flex: 1;   
+            border: none;   
+            font-size: 16px;   
+            outline: none;   
+            border-radius: 0;   
+            background: transparent;   
+            padding: 5px;  
+        }  
           
-        /* 便利ボタン */  
-        .action-btn { background: #eee; border: none; border-radius: 4px; padding: 6px 10px; font-size: 12px; color: #555; font-weight: bold; cursor: pointer; margin-left: 8px; white-space: nowrap; }  
-        .action-btn:active { background: #ddd; }  
-        .action-btn.home { color: #e67e22; background: #fff3e0; }  
+        /* サジェスト(候補)リストのデザイン */  
+        .suggest-list {  
+            position: absolute;  
+            background: #fff;  
+            border: 1px solid #ddd;  
+            border-top: none;  
+            width: 100%;  
+            max-height: 200px;  
+            overflow-y: auto;  
+            z-index: 1000;  
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);  
+            left: 0;  
+            border-radius: 0 0 4px 4px;  
+            display: none; /* 最初は非表示 */  
+        }  
+        .suggest-item {  
+            padding: 10px 15px;  
+            border-bottom: 1px solid #eee;  
+            font-size: 16px;  
+            cursor: pointer;  
+        }  
+        .suggest-item:active { background-color: #f0f0f0; }  
+        .suggest-item span { font-size: 12px; color: #888; margin-left: 8px; }  
   
-        /* 検索ボタン */  
-        .search-btn { background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-top: 10px; }  
+        /* ボタン類 */  
+        .action-btn {   
+            background: #eee; border: none; border-radius: 4px; padding: 6px 10px; font-size: 12px; color: #555; font-weight: bold; cursor: pointer; margin-left: 8px; white-space: nowrap;   
+        }  
+        .action-btn.home { color: #e67e22; background: #fff3e0; }  
+        .search-btn {   
+            background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-top: 10px;   
+        }  
         .search-btn:active { background-color: #e67e22; }  
   
-        /* 設定モーダル */  
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 200; justify-content: center; align-items: center; }  
-        .modal-content { background: #fff; padding: 20px; border-radius: 8px; width: 85%; max-width: 320px; }  
+        /* モーダル */  
+        .modal {   
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; justify-content: center; align-items: center;   
+        }  
+        .modal-content {   
+            background: #fff; padding: 20px; border-radius: 8px; width: 85%; max-width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);  
+        }  
         .modal-title { font-weight: bold; margin-bottom: 15px; font-size: 18px; }  
-        .modal-desc { font-size: 13px; color: #666; margin-bottom: 10px; }  
+        .modal-desc { font-size: 13px; color: #666; margin-bottom: 10px; line-height: 1.4; }  
         .modal-input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; }  
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }  
-        .btn-cancel { background: #eee; color: #333; border: none; padding: 8px 16px; border-radius: 4px; }  
-        .btn-save { background: #2ecc71; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; }  
+        .btn-cancel { background: #eee; color: #333; border: none; padding: 10px 16px; border-radius: 4px; font-weight: bold;}  
+        .btn-save { background: #2ecc71; color: #fff; border: none; padding: 10px 16px; border-radius: 4px; font-weight: bold;}  
   
         /* 結果リスト */  
         .result-container { padding: 10px; padding-bottom: 40px; }  
@@ -66,48 +134,46 @@
         .tl-content { flex: 1; }  
         .dashed { border-left: 2px dashed #999; width: 0; background: none; }  
         .taxi-info { color: #555; font-size: 13px; background: #f9f9f9; padding: 8px; border-radius: 4px; margin-top: 4px; }  
-  
     </style>  
 </head>  
 <body>  
   
-    <!-- ヘッダー -->  
     <div class="header">  
-        <div style="width: 24px;"></div> <!-- スペーサー -->  
+        <div style="width: 40px;"></div>  
         <div class="app-title">Never!諦めない案内</div>  
         <div class="settings-icon" onclick="openSettings()">⚙️</div>  
     </div>  
   
-    <!-- 検索フォーム -->  
     <div class="search-box">  
         <div class="input-row">  
             <span class="input-label">出発</span>  
-            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿">  
+            <!-- サジェスト機能を追加: onkeyupイベント -->  
+            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" onkeyup="suggestStation(this, 'startSuggest')" autocomplete="off">  
+            <!-- 候補リストを表示するコンテナ -->  
+            <div id="startSuggest" class="suggest-list"></div>  
         </div>  
         <div class="input-row">  
             <span class="input-label">到着</span>  
-            <input type="text" id="targetStation" class="input-field" placeholder="例: 横浜">  
+            <input type="text" id="targetStation" class="input-field" placeholder="例: 横浜" onkeyup="suggestStation(this, 'targetSuggest')" autocomplete="off">  
             <button class="action-btn home" onclick="useHomeAddress()">🏠 自宅</button>  
+            <div id="targetSuggest" class="suggest-list"></div>  
         </div>  
         <div class="input-row">  
             <span class="input-label">日時</span>  
-            <!-- datetime-local: カレンダー入力 -->  
             <input type="datetime-local" id="searchDateTime" class="input-field">  
             <button class="action-btn" onclick="setNow()">⏰ 現在</button>  
         </div>  
         <button class="search-btn" onclick="searchRoute()">検索する</button>  
     </div>  
   
-    <!-- 結果表示エリア -->  
     <div id="resultArea" class="result-container"></div>  
   
-    <!-- 設定モーダル (自宅登録用) -->  
     <div id="settingsModal" class="modal">  
         <div class="modal-content">  
-            <div class="modal-title">設定: 自宅の登録</div>  
+            <div class="modal-title">⚙️ 設定: 自宅の登録</div>  
             <div class="modal-desc">住所を入力してください。位置情報を取得して保存します（サーバーには送信されません）。</div>  
             <input type="text" id="addressInput" class="modal-input" placeholder="例: 東京都世田谷区...">  
-            <div id="addressResult" style="font-size:12px; color:#e67e22; margin-bottom:10px;"></div>  
+            <div id="addressResult" style="font-size:12px; color:#e67e22; margin-bottom:10px; min-height:1.2em;"></div>  
             <div class="modal-actions">  
                 <button class="btn-cancel" onclick="closeSettings()">閉じる</button>  
                 <button class="btn-save" onclick="saveHomeAddress()">保存する</button>  
@@ -116,25 +182,26 @@
     </div>  
   
     <script>  
-        // PWA Service Worker  
         if ('serviceWorker' in navigator) {  
-            navigator.serviceWorker.register('sw.js').then(function() { console.log('SW Registered'); });  
+            navigator.serviceWorker.register('sw.js');  
         }  
   
-        // --- 初期化 ---  
         window.onload = function() {  
-            setNow(); // ページを開いたときに現在日時をセット  
-            loadHomeData(); // 自宅情報を読み込む  
+            setNow();   
+            loadHomeData();  
+            // 画面のどこかをタップしたらサジェストを消す  
+            document.addEventListener('click', function(e) {  
+                if (!e.target.closest('.input-row')) {  
+                    document.getElementById('startSuggest').style.display = 'none';  
+                    document.getElementById('targetSuggest').style.display = 'none';  
+                }  
+            });  
         };  
   
-        // 自宅データを保持する変数  
         let homeCoords = null;  
   
-        // --- 現在日時セット関数 (datetime-local用) ---  
         function setNow() {  
             const now = new Date();  
-            // 日本時間(JST)に合わせてISO文字列を整形  
-            // datetime-local は "YYYY-MM-DDThh:mm" 形式を要求するため、タイムゾーンオフセットを調整  
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());  
             document.getElementById('searchDateTime').value = now.toISOString().slice(0, 16);  
         }  
@@ -146,13 +213,62 @@
             }  
         }  
   
+        // --- サジェスト機能 (HeartRails Express API) ---  
+        let suggestTimer = null;  
+  
+        function suggestStation(inputElement, listId) {  
+            const keyword = inputElement.value;  
+            const listElement = document.getElementById(listId);  
+  
+            if (keyword.length < 2) {  
+                listElement.style.display = 'none';  
+                return;  
+            }  
+  
+            // API連打を防ぐタイマー処理  
+            clearTimeout(suggestTimer);  
+            suggestTimer = setTimeout(async () => {  
+                try {  
+                    // JSONPを使わずCORS対応のエンドポイントがあればいいが、HeartRailsはJSON対応  
+                    const url = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}`;  
+                    const res = await fetch(url);  
+                    const data = await res.json();  
+  
+                    if (data.response && data.response.station) {  
+                        renderSuggestList(data.response.station, listElement, inputElement);  
+                    } else {  
+                        listElement.style.display = 'none';  
+                    }  
+                } catch (e) {  
+                    console.error("Suggest Error:", e);  
+                }  
+            }, 300); // 0.3秒待ってから検索  
+        }  
+  
+        function renderSuggestList(stations, listElement, inputElement) {  
+            listElement.innerHTML = '';  
+            // 同じ駅名が複数路線である場合があるので重複除外するか、路線名を表示する  
+            // ここでは路線名付きで表示  
+            stations.forEach(st => {  
+                const div = document.createElement('div');  
+                div.className = 'suggest-item';  
+                div.innerHTML = `${st.name} <span>(${st.line})</span>`;  
+                  
+                div.onclick = function() {  
+                    // クリックしたら入力欄にセット  
+                    inputElement.value = st.name; // シンプルに駅名だけセット  
+                    listElement.style.display = 'none';  
+                };  
+                listElement.appendChild(div);  
+            });  
+            listElement.style.display = 'block';  
+        }  
+  
         // --- 設定・自宅登録 ---  
   
         function openSettings() {  
             document.getElementById('settingsModal').style.display = 'flex';  
-            if(homeCoords) {  
-                document.getElementById('addressInput').value = homeCoords.address;  
-            }  
+            if(homeCoords) { document.getElementById('addressInput').value = homeCoords.address; }  
         }  
   
         function closeSettings() {  
@@ -163,28 +279,18 @@
         async function saveHomeAddress() {  
             const address = document.getElementById('addressInput').value;  
             if (!address) return;  
-  
-            document.getElementById('addressResult').innerText = "検索中...";  
-  
+            document.getElementById('addressResult').innerText = "住所を検索中...";  
             try {  
-                // 国土地理院の住所検索API (無料)  
                 const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`;  
                 const res = await fetch(url);  
                 const data = await res.json();  
-  
                 if (data && data.length > 0) {  
-                    const location = data[0].geometry.coordinates; // [lon, lat]  
+                    const location = data[0].geometry.coordinates;  
                     const saveData = {  
-                        address: address,  
-                        lon: location[0],  
-                        lat: location[1],  
-                        is_registered: true  
+                        address: address, lon: location[0], lat: location[1], is_registered: true  
                     };  
-                      
-                    // ブラウザに保存  
                     localStorage.setItem('never_home_v1', JSON.stringify(saveData));  
-                    loadHomeData(); // メモリも更新  
-                      
+                    loadHomeData();   
                     document.getElementById('addressResult').innerText = "✅ 保存しました！";  
                     setTimeout(closeSettings, 1000);  
                 } else {  
@@ -197,12 +303,8 @@
         }  
   
         function useHomeAddress() {  
-            if (homeCoords) {  
-                document.getElementById('targetStation').value = "自宅";  
-            } else {  
-                alert("右上の⚙️設定ボタンから、自宅の住所を登録してください。");  
-                openSettings();  
-            }  
+            if (homeCoords) { document.getElementById('targetStation').value = "自宅"; }   
+            else { alert("右上の⚙️設定ボタンから、自宅の住所を登録してください。"); openSettings(); }  
         }  
   
         // --- 検索処理 ---  
@@ -210,31 +312,20 @@
         async function searchRoute() {  
             const start = document.getElementById('startStation').value;  
             const targetInput = document.getElementById('targetStation').value;  
-              
-            // 日時ピッカーから値を取得  
             const rawDateStr = document.getElementById('searchDateTime').value;  
+  
             if (!rawDateStr) { alert("日時を入力してください"); return; }  
               
             const dateObj = new Date(rawDateStr);  
-              
-            // === 鉄道用「30時間制」への変換ロジック ===  
-            // 深夜0時〜3時の間なら、「前日の24時〜27時」として扱う  
             let serviceHour = dateObj.getHours();  
             let serviceMinute = dateObj.getMinutes();  
   
-            if (serviceHour < 4) { // 午前4時より前なら  
-                serviceHour += 24; // 例: 0時 -> 24時, 1時 -> 25時  
-                // ※本来はここで「検索対象の日付」を1日戻しますが、  
-                // 現状のバックエンドは時刻(HH:MM)のみ見ているので時刻だけ加工します  
-            }  
+            if (serviceHour < 4) { serviceHour += 24; }  
   
             const mm = serviceMinute < 10 ? '0' + serviceMinute : serviceMinute;  
-            // バックエンドには "24:20" のような文字列を送る  
             const timeStr = `${serviceHour}:${mm}`;  
-  
             const resultArea = document.getElementById('resultArea');  
   
-            // 送信データの準備  
             const payload = {  
                 start_station: start,  
                 target_station: targetInput,  
@@ -243,7 +334,6 @@
                 target_lon: null  
             };  
   
-            // 「自宅」が選択されている場合、座標をセットする  
             if (targetInput.includes("自宅") && homeCoords) {  
                 payload.target_lat = homeCoords.lat;  
                 payload.target_lon = homeCoords.lon;  
@@ -258,15 +348,12 @@
                     headers: { 'Content-Type': 'application/json' },  
                     body: JSON.stringify(payload)  
                 });  
-  
                 const data = await response.json();  
-  
                 if (data.status === 'error') {  
                      resultArea.innerHTML = `<div class="warning-msg">${data.message}</div>`;  
                 } else {  
                     renderResults(data);  
                 }  
-  
             } catch (error) {  
                 resultArea.innerHTML = '<div style="color:red; padding:20px;">通信エラーが発生しました。</div>';  
                 console.error(error);  
@@ -292,8 +379,6 @@
             data.candidates.slice(0, 5).forEach((route) => {  
                 const card = document.createElement('div');  
                 card.className = 'route-card' + (data.is_target_reachable ? '' : ' limit');  
-                  
-                // タクシー料金概算 (深夜割増1.2倍 + 迎車など考慮)  
                 const taxiPrice = Math.round(route.distance_to_target_km * 350 + 500);  
   
                 const html = `  
