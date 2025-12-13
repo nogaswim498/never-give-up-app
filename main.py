@@ -1,6 +1,6 @@
 from fastapi import FastAPI  
 from fastapi.responses import FileResponse  
-from fastapi.staticfiles import StaticFiles  
+from fastapi.staticfiles import StaticFiles # これを使います  
 from pydantic import BaseModel  
 from fastapi.middleware.cors import CORSMiddleware  
 import core_engine  
@@ -17,13 +17,18 @@ app.add_middleware(
     allow_headers=["*"],  
 )  
   
+# === ★ここが修正ポイント: dataフォルダの中身を配信できるようにする ===  
+# これがないと stations_kanto.json が読み込めません  
+app.mount("/data", StaticFiles(directory="data"), name="data")  
+  
 class SearchRequest(BaseModel):  
     start_station: str  
     target_station: str  
     current_time: str  
-    target_lat: Optional[float] = None # 追加  
-    target_lon: Optional[float] = None # 追加  
+    target_lat: Optional[float] = None  
+    target_lon: Optional[float] = None  
   
+# --- 個別ファイルの配信設定 ---  
 @app.get("/")  
 def read_root(): return FileResponse("index.html", media_type="text/html")  
 @app.get("/manifest.json")  
@@ -39,6 +44,7 @@ def read_favicon():
     if os.path.exists("icon.png"): return FileResponse("icon.png", media_type="image/png")  
     return FileResponse("index.html")  
   
+# --- 検索API ---  
 @app.post("/search")  
 def search_route(req: SearchRequest):  
     results = core_engine.search_routes(  
