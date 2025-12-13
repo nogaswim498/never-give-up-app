@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 print("📂 Loading data...")  
 try:  
     df_stops = pd.read_csv("data/stops.txt")  
-    # 検索用マップ: 名前そのままと、"駅"を除いたもの両方登録しておく  
+    # 検索用マップ: 名前そのままと、"駅"を除いたもの両方登録  
     name_to_id = {}  
     for _, row in df_stops.iterrows():  
         name_to_id[row["stop_name"]] = row["stop_id"]  
@@ -40,27 +40,33 @@ except FileNotFoundError:
 # === 2. ユーティリティ関数 ===  
   
 def get_station_id_from_name(name):  
-    # 完全一致  
     if name in name_to_id: return name_to_id[name]  
-    # "駅"ありなしで再トライ  
     if name.endswith("駅") and name[:-1] in name_to_id: return name_to_id[name[:-1]]  
     if not name.endswith("駅") and (name+"駅") in name_to_id: return name_to_id[name+"駅"]  
     return name  
   
 def parse_time_to_minutes(time_str):  
+    """  
+    時刻文字列を分に変換する。  
+    ★重要修正: 00:00〜03:59 は 24:00〜27:59 (深夜延長) として扱う  
+    """  
     try:  
         parts = list(map(int, time_str.split(':')))  
         h, m = parts[0], parts[1]  
-        # ★修正: 24時を超えても引かない！ (25:00 は 1500分 として扱う)  
-        # if h >= 24: h -= 24  <-- これを削除しました  
+          
+        # データが "00:15" の場合、23:59より未来と判定させるために "24:15" 扱いにする  
+        if h < 4:  
+            h += 24  
+              
         return h * 60 + m  
     except:  
-        return 99999 # エラー時は未来にしておく  
+        return 99999  
   
 def format_minutes_to_time(minutes):  
+    """ 分を HH:MM 表記に戻す (24時越え対応) """  
     h = (minutes // 60)  
     m = minutes % 60  
-    # 表示用: 24時を超えていたら24, 25...と表示する  
+    # 24時を超えていたらそのまま表示 (例: 25:10)  
     return f"{h:02d}:{m:02d}"  
   
 def haversine_distance(lat1, lon1, lat2, lon2):  
@@ -88,9 +94,10 @@ def calculate_taxi_fare(km_distance, arrival_time_str):
         fare = base_fare + (add_count * 100)  
       
     try:  
+        # 深夜割増判定  
+        # arrival_time_str は "25:10" のようになっている可能性がある  
         h = int(arrival_time_str.split(':')[0])  
-        # 22時以降は深夜割増  
-        is_night = (h >= 22 or h < 5)  
+        is_night = (h >= 22 or h < 5 or h >= 24)  
         if is_night: fare = int(fare * 1.2)  
     except:  
         pass  
@@ -103,7 +110,6 @@ def calculate_taxi_fare(km_distance, arrival_time_str):
 def search_routes(start_name, current_time_str, target_name=None, target_lat=None, target_lon=None):  
     start_id = get_station_id_from_name(start_name)  
     if start_id not in df_stops.index:  
-        # 駅名が見つからない場合、デバッグ用に候補に近いものを返す処理を入れると親切だが、まずはエラー  
         return {"error": f"出発駅 '{start_name}' (ID:{start_id}) のデータがありません。"}  
   
     dest_lat = 0.0  
@@ -133,8 +139,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
     processed_trips = set()  
       
     explore_count = 0  
-    # 探索範囲を拡大 (地下鉄網は複雑なので回数を増やす)  
-    MAX_EXPLORE = 20000   
+    MAX_EXPLORE = 30000 # 探索上限をさらに緩和  
   
     while queue and explore_count < MAX_EXPLORE:  
         current_station = queue.pop(0)  
@@ -198,5 +203,6 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
             "last_stop_id": station_id  
         })  
       
+    # 料金が安い順（または距離が近い順）  
     results.sort(key=lambda x: x["taxi_price"])  
     return results  
