@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">  
     <title>Never!諦めない案内</title>  
       
-    <!-- PWA設定 -->  
     <link rel="manifest" href="manifest.json">  
     <link rel="apple-touch-icon" href="icon.png">  
     <meta name="apple-mobile-web-app-capable" content="yes">  
@@ -13,130 +12,53 @@
       
     <style>  
         /* === デザイン定義 === */  
-        body {   
-            margin: 0;   
-            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;   
-            background-color: #f2f2f2;   
-            color: #333;   
-            -webkit-tap-highlight-color: transparent;   
-        }  
-          
-        /* ヘッダー */  
-        .header {   
-            background-color: #ffffff;   
-            padding: 12px;   
-            border-bottom: 1px solid #ddd;   
-            position: sticky;   
-            top: 0;   
-            z-index: 100;   
-            display: flex;   
-            justify-content: space-between;   
-            align-items: center;   
-            height: 44px;  
-        }  
+        body { margin: 0; font-family: -apple-system, sans-serif; background-color: #f2f2f2; color: #333; -webkit-tap-highlight-color: transparent; padding-bottom: 120px; }  
+        .header { background-color: #ffffff; padding: 12px; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; height: 44px;}  
         .app-title { font-weight: bold; color: #2ecc71; font-size: 18px; flex-grow: 1; text-align: center; }  
         .settings-icon { font-size: 24px; color: #666; cursor: pointer; padding: 0 15px; }  
-  
-        /* 入力エリア */  
-        .search-box {   
-            background: #fff;   
-            padding: 16px;   
-            margin-bottom: 10px;   
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);   
-            position: relative; /* サジェスト表示用 */  
-        }  
-        .input-row {   
-            display: flex;   
-            align-items: center;   
-            margin-bottom: 12px;   
-            border-bottom: 1px solid #eee;   
-            padding-bottom: 8px;   
-            position: relative;   
-        }  
+        .search-box { background: #fff; padding: 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); position: relative; }  
+        .input-row { display: flex; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; position: relative; }  
         .input-label { width: 50px; font-weight: bold; font-size: 14px; color: #666; }  
-        .input-field {   
-            flex: 1;   
-            border: none;   
-            font-size: 16px;   
-            outline: none;   
-            border-radius: 0;   
-            background: transparent;   
-            padding: 5px;  
-        }  
-          
-        /* サジェスト(候補)リストのデザイン */  
-        .suggest-list {  
-            position: absolute;  
-            background: #fff;  
-            border: 1px solid #ddd;  
-            border-top: none;  
-            width: 100%;  
-            max-height: 200px;  
-            overflow-y: auto;  
-            z-index: 1000;  
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);  
-            left: 0;  
-            border-radius: 0 0 4px 4px;  
-            display: none; /* 最初は非表示 */  
-        }  
-        .suggest-item {  
-            padding: 10px 15px;  
-            border-bottom: 1px solid #eee;  
-            font-size: 16px;  
-            cursor: pointer;  
-        }  
-        .suggest-item:active { background-color: #f0f0f0; }  
-        .suggest-item span { font-size: 12px; color: #888; margin-left: 8px; }  
-  
-        /* ボタン類 */  
-        .action-btn {   
-            background: #eee; border: none; border-radius: 4px; padding: 6px 10px; font-size: 12px; color: #555; font-weight: bold; cursor: pointer; margin-left: 8px; white-space: nowrap;   
-        }  
+        .input-field { flex: 1; border: none; font-size: 16px; outline: none; border-radius: 0; background: transparent; padding: 5px; }  
+        .action-btn { background: #eee; border: none; border-radius: 4px; padding: 6px 10px; font-size: 12px; color: #555; font-weight: bold; cursor: pointer; margin-left: 8px; white-space: nowrap; }  
         .action-btn.home { color: #e67e22; background: #fff3e0; }  
-        .search-btn {   
-            background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-top: 10px;   
-        }  
-        .search-btn:active { background-color: #e67e22; }  
+        .search-btn { background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-top: 10px; }  
+          
+        /* サジェストリスト */  
+        .suggest-list { position: absolute; background: #fff; border: 1px solid #ddd; top: 100%; width: 100%; max-height: 200px; overflow-y: auto; z-index: 1000; display: none; left: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }  
+        .suggest-item { padding: 10px 15px; border-bottom: 1px solid #eee; font-size: 16px; }  
+          
+        /* デバッグコンソール (画面下) */  
+        #debug-console { position: fixed; bottom: 0; left: 0; right: 0; height: 100px; background: rgba(0,0,0,0.85); color: #0f0; font-family: monospace; font-size: 10px; overflow-y: scroll; z-index: 9999; padding: 5px; pointer-events: none; }  
   
         /* モーダル */  
-        .modal {   
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; justify-content: center; align-items: center;   
-        }  
-        .modal-content {   
-            background: #fff; padding: 20px; border-radius: 8px; width: 85%; max-width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);  
-        }  
-        .modal-title { font-weight: bold; margin-bottom: 15px; font-size: 18px; }  
-        .modal-desc { font-size: 13px; color: #666; margin-bottom: 10px; line-height: 1.4; }  
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; justify-content: center; align-items: center; }  
+        .modal-content { background: #fff; padding: 20px; border-radius: 8px; width: 85%; max-width: 320px; }  
         .modal-input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; }  
         .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }  
-        .btn-cancel { background: #eee; color: #333; border: none; padding: 10px 16px; border-radius: 4px; font-weight: bold;}  
-        .btn-save { background: #2ecc71; color: #fff; border: none; padding: 10px 16px; border-radius: 4px; font-weight: bold;}  
+        .btn-cancel { background: #eee; color: #333; border: none; padding: 10px 16px; border-radius: 4px; }  
+        .btn-save { background: #2ecc71; color: #fff; border: none; padding: 10px 16px; border-radius: 4px; }  
   
-        /* 結果リスト */  
-        .result-container { padding: 10px; padding-bottom: 40px; }  
-        .warning-msg { background-color: #ffebee; color: #d32f2f; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 14px; border: 1px solid #ffcdd2; font-weight: bold;}  
-          
-        .route-card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 5px solid #2ecc71; }  
-        .route-card.limit { border-left-color: #fa8a28; }   
-  
+        .result-container { padding: 10px; }  
+        .route-card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 5px solid #2ecc71; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }  
+        .route-card.limit { border-left-color: #fa8a28; }  
         .card-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }  
         .station-name { font-size: 20px; font-weight: bold; }  
-        .arrival-time { font-size: 24px; font-weight: bold; color: #333; }  
-        .info-row { display: flex; gap: 10px; font-size: 12px; color: #666; margin-bottom: 10px; }  
-        .badge { background: #eee; padding: 2px 6px; border-radius: 3px; }  
-  
-        /* タイムライン */  
+        .arrival-time { font-size: 24px; font-weight: bold; }  
+        .badge { background: #eee; padding: 2px 6px; border-radius: 3px; font-size: 12px; }  
         .timeline { margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; }  
         .tl-item { display: flex; font-size: 14px; margin-bottom: 8px; }  
-        .tl-time { width: 45px; font-weight: bold; text-align: right; padding-right: 10px; color: #333; }  
+        .tl-time { width: 45px; font-weight: bold; text-align: right; padding-right: 10px; }  
         .tl-line { width: 2px; background: #ccc; position: relative; margin: 0 10px; }  
         .tl-dot { width: 10px; height: 10px; background: #fff; border: 3px solid #fa8a28; border-radius: 50%; position: absolute; left: -7px; top: 0; }  
         .tl-content { flex: 1; }  
         .dashed { border-left: 2px dashed #999; width: 0; background: none; }  
-        .taxi-info { color: #555; font-size: 13px; background: #f9f9f9; padding: 8px; border-radius: 4px; margin-top: 4px; }  
     </style>  
 </head>  
 <body>  
+  
+    <!-- デバッグ用エリア -->  
+    <div id="debug-console">Console Ready...<br></div>  
   
     <div class="header">  
         <div style="width: 40px;"></div>  
@@ -147,8 +69,8 @@
     <div class="search-box">  
         <div class="input-row">  
             <span class="input-label">出発</span>  
-            <!-- サジェスト機能を追加: onkeyupイベント -->  
-            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" oninput="suggestStation(this, 'startSuggest')" autocomplete="off">              <!-- 候補リストを表示するコンテナ -->  
+            <!-- ここに oninput を確実に記述 -->  
+            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" oninput="suggestStation(this, 'startSuggest')" autocomplete="off">  
             <div id="startSuggest" class="suggest-list"></div>  
         </div>  
         <div class="input-row">  
@@ -170,9 +92,8 @@
     <div id="settingsModal" class="modal">  
         <div class="modal-content">  
             <div class="modal-title">⚙️ 設定: 自宅の登録</div>  
-            <div class="modal-desc">住所を入力してください。位置情報を取得して保存します（サーバーには送信されません）。</div>  
             <input type="text" id="addressInput" class="modal-input" placeholder="例: 東京都世田谷区...">  
-            <div id="addressResult" style="font-size:12px; color:#e67e22; margin-bottom:10px; min-height:1.2em;"></div>  
+            <div id="addressResult" style="font-size:12px; color:#e67e22; margin-bottom:10px;"></div>  
             <div class="modal-actions">  
                 <button class="btn-cancel" onclick="closeSettings()">閉じる</button>  
                 <button class="btn-save" onclick="saveHomeAddress()">保存する</button>  
@@ -181,13 +102,27 @@
     </div>  
   
     <script>  
+        // --- デバッグ用ログ関数 ---  
+        function log(msg, isError=false) {  
+            const el = document.getElementById('debug-console');  
+            const color = isError ? 'red' : '#0f0';  
+            el.innerHTML += `<span style="color:${color};">[${new Date().toLocaleTimeString()}] ${msg}</span><br>`;  
+            el.scrollTop = el.scrollHeight;  
+            console.log(msg);  
+        }  
+  
+        // JSエラーを画面に出す  
+        window.onerror = function(msg, url, line) {  
+            log(`JS Error: ${msg} (Line: ${line})`, true);  
+        };  
+  
         // Service Worker  
         if ('serviceWorker' in navigator) {  
-            navigator.serviceWorker.register('sw.js');  
+            navigator.serviceWorker.register('sw.js').catch(err => log("SW Error: " + err, true));  
         }  
   
         window.onload = function() {  
-            setNow();   
+            setNow();  
             loadHomeData();  
             document.addEventListener('click', function(e) {  
                 if (!e.target.closest('.input-row')) {  
@@ -197,6 +132,7 @@
                     if(t) t.style.display = 'none';  
                 }  
             });  
+            log("App Loaded. Input event is ready.");  
         };  
   
         let homeCoords = null;  
@@ -211,23 +147,21 @@
             const homeData = JSON.parse(localStorage.getItem('never_home_v1') || '{}');  
             if (homeData.is_registered) {  
                 homeCoords = { lat: homeData.lat, lon: homeData.lon, address: homeData.address };  
+                log("Home data loaded.");  
             }  
         }  
   
-        // ==========================================  
-        // ★診断モード: JSONPサジェスト★  
-        // ==========================================  
+        // --- サジェスト機能 (JSONP) ---  
         let suggestTimer = null;  
         let currentListId = null;  
         let currentInputId = null;  
   
         function suggestStation(inputElement, listId) {  
             const keyword = inputElement.value;  
-              
-            // 【診断1】入力イベントが発火しているか？  
-            // console.log("入力検知: " + keyword);   
+            // log("Input: " + keyword); // 入力検知ログ  
   
             const listElement = document.getElementById(listId);  
+  
             if (keyword.length < 2) {  
                 listElement.style.display = 'none';  
                 return;  
@@ -237,43 +171,38 @@
             suggestTimer = setTimeout(() => {  
                 currentListId = listId;  
                 currentInputId = inputElement.id;  
+                  
+                // log("Fetching: " + keyword);  
   
                 const oldScript = document.getElementById('jsonp_script');  
                 if (oldScript) oldScript.remove();  
   
-                // 【診断2】URLを作成  
-                const url = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}&jsonp=receiveStations`;  
-                // alert("通信します: " + keyword); // うざいのでコメントアウト  
-  
                 const script = document.createElement('script');  
                 script.id = 'jsonp_script';  
-                script.src = url;  
+                // JSONP呼び出し  
+                script.src = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}&jsonp=receiveStations`;  
                   
-                // エラーハンドリング追加  
                 script.onerror = function() {  
-                    alert("【エラー】スクリプトの読み込みに失敗しました。\nCSPやネットワーク制限の可能性があります。");  
+                    log("Network Error: HeartRails API blocked.", true);  
                 };  
   
                 document.body.appendChild(script);  
-            }, 500); // 0.5秒待機  
+            }, 500);  
         }  
   
-        // データ受信関数  
+        // コールバック関数  
         window.receiveStations = function(data) {  
-            // 【診断3】データが届いたか？  
-            // alert("データ受信成功！");   
-  
+            // log("Data received!");  
             const listElement = document.getElementById(currentListId);  
             const inputElement = document.getElementById(currentInputId);  
               
             if (!listElement || !inputElement) return;  
   
             if (data.response && data.response.station) {  
-                // alert("駅が見つかりました: " + data.response.station.length + "件");  
                 renderSuggestList(data.response.station, listElement, inputElement);  
             } else {  
-                // alert("駅が見つかりませんでした (0件)");  
                 listElement.style.display = 'none';  
+                // log("No stations found.");  
             }  
         };  
   
@@ -299,22 +228,19 @@
             listElement.style.display = 'block';  
         }  
   
-        // ==========================================  
-  
+        // --- 設定・自宅登録 ---  
         function openSettings() {  
             document.getElementById('settingsModal').style.display = 'flex';  
             if(homeCoords) { document.getElementById('addressInput').value = homeCoords.address; }  
         }  
-  
         function closeSettings() {  
             document.getElementById('settingsModal').style.display = 'none';  
             document.getElementById('addressResult').innerText = '';  
         }  
-  
         async function saveHomeAddress() {  
             const address = document.getElementById('addressInput').value;  
             if (!address) return;  
-            document.getElementById('addressResult').innerText = "住所を検索中...";  
+            document.getElementById('addressResult').innerText = "検索中...";  
             try {  
                 const url = `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(address)}`;  
                 const res = await fetch(url);  
@@ -326,22 +252,22 @@
                     };  
                     localStorage.setItem('never_home_v1', JSON.stringify(saveData));  
                     loadHomeData();   
-                    document.getElementById('addressResult').innerText = "✅ 保存しました！";  
+                    document.getElementById('addressResult').innerText = "✅ 保存しました";  
                     setTimeout(closeSettings, 1000);  
                 } else {  
-                    document.getElementById('addressResult').innerText = "⚠️ 住所が見つかりませんでした。";  
+                    document.getElementById('addressResult').innerText = "⚠️ 住所なし";  
                 }  
             } catch (e) {  
-                console.error(e);  
-                document.getElementById('addressResult').innerText = "通信エラーが発生しました。";  
+                log("Address Error: " + e, true);  
+                document.getElementById('addressResult').innerText = "通信エラー";  
             }  
         }  
-  
         function useHomeAddress() {  
             if (homeCoords) { document.getElementById('targetStation').value = "自宅"; }   
             else { alert("右上の⚙️設定ボタンから、自宅の住所を登録してください。"); openSettings(); }  
         }  
   
+        // --- 検索処理 ---  
         async function searchRoute() {  
             const start = document.getElementById('startStation').value;  
             const targetInput = document.getElementById('targetStation').value;  
@@ -352,9 +278,7 @@
             const dateObj = new Date(rawDateStr);  
             let serviceHour = dateObj.getHours();  
             let serviceMinute = dateObj.getMinutes();  
-  
             if (serviceHour < 4) { serviceHour += 24; }  
-  
             const mm = serviceMinute < 10 ? '0' + serviceMinute : serviceMinute;  
             const timeStr = `${serviceHour}:${mm}`;  
             const resultArea = document.getElementById('resultArea');  
@@ -388,32 +312,28 @@
                     renderResults(data);  
                 }  
             } catch (error) {  
-                resultArea.innerHTML = '<div style="color:red; padding:20px;">通信エラーが発生しました。</div>';  
-                console.error(error);  
+                log("Search Error: " + error, true);  
+                resultArea.innerHTML = '<div style="color:red; padding:20px;">通信エラー</div>';  
             }  
         }  
   
         function renderResults(data) {  
             const container = document.getElementById('resultArea');  
             container.innerHTML = '';  
-  
             if (!data.candidates || data.candidates.length === 0) {  
                 container.innerHTML = '<div style="padding:20px;">ルートが見つかりませんでした。</div>';  
                 return;  
             }  
-  
             if (!data.is_target_reachable) {  
                 const msg = document.createElement('div');  
                 msg.className = 'warning-msg';  
                 msg.innerText = `⚠️ 目的地までは到達できません。\n近くまで行けるルートを表示します。`;  
                 container.appendChild(msg);  
             }  
-  
             data.candidates.slice(0, 5).forEach((route) => {  
                 const card = document.createElement('div');  
                 card.className = 'route-card' + (data.is_target_reachable ? '' : ' limit');  
                 const taxiPrice = Math.round(route.distance_to_target_km * 350 + 500);  
-  
                 const html = `  
                     <div class="card-header">  
                         <div class="station-name">${route.station} <span style="font-size:14px; font-weight:normal">着</span></div>  
@@ -423,7 +343,6 @@
                         <span class="badge" style="background:#fff3e0; color:#e65100">残り ${route.distance_to_target_km} km</span>  
                         <span class="badge">乗換 ${route.route_count - 1}回</span>  
                     </div>  
-                      
                     <div class="timeline">  
                         <div class="tl-item">  
                             <div class="tl-time">${data.search_condition.time}</div>  
@@ -457,6 +376,5 @@
             });  
         }  
     </script>  
-
 </body>  
 </html>  
