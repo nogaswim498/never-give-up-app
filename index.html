@@ -278,7 +278,10 @@
             data.candidates.slice(0, 5).forEach((route) => {  
                 const card = document.createElement('div');  
                 card.className = 'route-card' + (data.is_target_reachable ? '' : ' limit');  
-                const taxiPrice = Math.round(route.distance_to_target_km * 350 + 500);  
+                // サーバーが計算した料金があれば使い、なければフォールバック  
+                const taxiPrice = route.taxi_price   
+                    ? route.taxi_price   
+                    : Math.round(route.distance_to_target_km * 350 + 500);    
                 const html = `  
                     <div class="card-header">  
                         <div class="station-name">${route.station} <span style="font-size:14px; font-weight:normal">着</span></div>  
