@@ -5,70 +5,103 @@ from datetime import datetime, timedelta
 # === 1. データ読み込み ===  
 print("📂 Loading data...")  
 try:  
-    # 駅データ (IDをキーにする)  
-    df_stops = pd.read_csv("data/stops.txt").set_index("stop_id")  
-    # 時刻表データ  
+    df_stops = pd.read_csv("data/stops.txt")  
+    # 日本語名検索用に辞書を作る (例: "東京" -> "Tokyo")  
+    name_to_id = dict(zip(df_stops["stop_name"], df_stops["stop_id"]))  
+      
+    # 検索高速化のためにIDをインデックスに  
+    df_stops = df_stops.set_index("stop_id")  
+      
     df_times = pd.read_csv("data/stop_times.txt")  
 except FileNotFoundError:  
-    print("❌ エラー: データファイルが見つかりません。Step 1を実行しましたか？")  
+    print("❌ エラー: データファイルが見つかりません。")  
     exit()  
   
 # === 2. ユーティリティ関数 ===  
   
+def get_station_id_from_name(name):  
+    """ 日本語駅名からIDを取得。見つからなければそのまま返す """  
+    # 完全一致検索  
+    if name in name_to_id:  
+        return name_to_id[name]  
+    # "駅"がついている場合への対応 ("新宿駅" -> "新宿" -> "Shinjuku")  
+    if name.endswith("駅") and name[:-1] in name_to_id:  
+        return name_to_id[name[:-1]]  
+    return name # 英語IDそのままで来た場合など  
+  
 def parse_time_to_minutes(time_str):  
-    """ 'HH:MM:SS' または 'HH:MM' を「00:00からの経過分」に変換 """  
     parts = list(map(int, time_str.split(':')))  
     h, m = parts[0], parts[1]  
-    # 深夜24時以降の扱い  
-    if h >= 24:  
-        h -= 24  
+    if h >= 24: h -= 24  
     return h * 60 + m  
   
 def format_minutes_to_time(minutes):  
-    """ 分を 'HH:MM' 表記に戻す """  
     h = (minutes // 60)  
     m = minutes % 60  
     return f"{h:02d}:{m:02d}"  
   
 def haversine_distance(lat1, lon1, lat2, lon2):  
-    """ 2点間の緯度経度から距離(km)を計算 """  
-    R = 6371  # 地球の半径 (km)  
+    R = 6371  
     phi1, phi2 = math.radians(lat1), math.radians(lat2)  
     dphi = math.radians(lat2 - lat1)  
     dlambda = math.radians(lon2 - lon1)  
       
-    # 計算式を整理  
     term1 = math.sin(dphi / 2)**2  
     term2 = math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2)**2  
     a = term1 + term2  
-           
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))  
     return R * c  
   
-# === 3. 探索ロジック (Time-Dependent BFS) ===  
+# === 3. 探索ロジック ===  
   
-def search_routes(start_id, target_id, current_time_str):  
-    print(f"🔎 Searching routes from {start_id} to {target_id} after {current_time_str}...")  
+def search_routes(start_name, current_time_str, target_name=None, target_lat=None, target_lon=None):  
+    """  
+    target_name: 駅名 (例: Yokohama)  
+    target_lat/lon: 座標 (自宅など)  
+    ※ どちらかが必須  
+    """  
+      
+    # 出発駅の名前をIDに変換  
+    start_id = get_station_id_from_name(start_name)  
+      
+    if start_id not in df_stops.index:  
+        return {"error": f"出発駅 '{start_name}' がデータに見つかりません。"}  
+  
+    # ターゲットの座標を確定させる  
+    dest_lat = 0.0  
+    dest_lon = 0.0  
+    dest_name_display = "目的地"  
+  
+    if target_lat is not None and target_lon is not None:  
+        # 座標指定（自宅）の場合  
+        dest_lat = target_lat  
+        dest_lon = target_lon  
+        dest_name_display = "自宅"  
+    elif target_name:  
+        # 駅名指定の場合  
+        target_id = get_station_id_from_name(target_name)  
+        if target_id not in df_stops.index:  
+            return {"error": f"到着駅 '{target_name}' がデータに見つかりません。"}  
+        dest_lat = df_stops.loc[target_id, "stop_lat"]  
+        dest_lon = df_stops.loc[target_id, "stop_lon"]  
+        dest_name_display = target_name  
+    else:  
+        return {"error": "目的地が指定されていません。"}  
+  
+    print(f"🔎 Search: {start_id} -> ({dest_lat}, {dest_lon}) @ {current_time_str}")  
       
     current_minutes = parse_time_to_minutes(current_time_str)  
       
-    # ターゲット駅の座標  
-    target_lat = df_stops.loc[target_id, "stop_lat"]  
-    target_lon = df_stops.loc[target_id, "stop_lon"]  
-  
-    # 到達可能な駅を管理する辞書  
-    # key: stop_id, value: {arrival_time: 分, route: [駅リスト]}  
+    # BFS探索 (到達可能な駅を全列挙)  
     reachable = {  
         start_id: {"arrival_time": current_minutes, "route": [start_id]}  
     }  
-      
-    queue = [start_id] # 探索キュー  
+    queue = [start_id]  
       
     while queue:  
         current_station = queue.pop(0)  
         current_arrival = reachable[current_station]["arrival_time"]  
           
-        # この駅から出発するすべての便を探す  
         departures = df_times[df_times["stop_id"] == current_station]  
           
         for _, dep_row in departures.iterrows():  
@@ -76,10 +109,7 @@ def search_routes(start_id, target_id, current_time_str):
             dep_time = parse_time_to_minutes(dep_row["departure_time"])  
             dep_seq = dep_row["stop_sequence"]  
               
-            # まだ乗れる電車か？  
             if dep_time >= current_arrival:  
-                # この便(trip_id)の「次の駅以降」を取得  
-                # 括弧で囲むことで安全に改行  
                 condition = (  
                     (df_times["trip_id"] == trip_id) &   
                     (df_times["stop_sequence"] > dep_seq)  
@@ -90,15 +120,12 @@ def search_routes(start_id, target_id, current_time_str):
                     next_station = arr_row["stop_id"]  
                     arr_time = parse_time_to_minutes(arr_row["arrival_time"])  
                       
-                    # より早く着ける、または未到達の駅なら更新  
-                    # ここも括弧で囲んで安全に記述  
-                    is_new_station = (next_station not in reachable)  
-                    is_faster_arrival = False  
-                    if not is_new_station:  
-                        is_faster_arrival = (arr_time < reachable[next_station]["arrival_time"])  
+                    is_new = (next_station not in reachable)  
+                    is_faster = False  
+                    if not is_new:  
+                        is_faster = (arr_time < reachable[next_station]["arrival_time"])  
   
-                    if is_new_station or is_faster_arrival:  
-                        # ルート更新  
+                    if is_new or is_faster:  
                         prev_route = reachable[current_station]["route"]  
                         reachable[next_station] = {  
                             "arrival_time": arr_time,  
@@ -106,56 +133,27 @@ def search_routes(start_id, target_id, current_time_str):
                         }  
                         queue.append(next_station)  
   
-    # === 4. 結果の評価と整形 ===  
+    # 結果作成  
     results = []  
       
     for station_id, data in reachable.items():  
-        if station_id == start_id: continue # 出発地は除外  
+        if station_id == start_id: continue  
           
-        # 目的地までの距離を計算  
+        # 到達した駅から、目的地（自宅座標 or 駅座標）への距離  
         st_lat = df_stops.loc[station_id, "stop_lat"]  
         st_lon = df_stops.loc[station_id, "stop_lon"]  
-        dist = haversine_distance(st_lat, st_lon, target_lat, target_lon)  
+        dist = haversine_distance(st_lat, st_lon, dest_lat, dest_lon)  
           
+        # 駅名（日本語）を取得  
+        st_name_jp = df_stops.loc[station_id, "stop_name"]  
+  
         results.append({  
-            "station": df_stops.loc[station_id, "stop_name"],  
+            "station": st_name_jp, # 表示用  
             "arrival_time": format_minutes_to_time(data["arrival_time"]),  
             "distance_to_target_km": round(dist, 2),  
             "route_count": len(data["route"]),  
             "last_stop_id": station_id  
         })  
       
-    # 目的地に近い順にソート  
     results.sort(key=lambda x: x["distance_to_target_km"])  
     return results  
-  
-# === 実行テスト ===  
-  
-if __name__ == "__main__":  
-    # シナリオ設定  
-    START_NODE = "Shibuya"  
-    TARGET_NODE = "Yokohama"  
-    CURRENT_TIME = "24:40" # 深夜 00:40  
-  
-    candidates = search_routes(START_NODE, TARGET_NODE, CURRENT_TIME)  
-  
-    print("\n" + "="*40)  
-    print(f"🧞 結果発表: {CURRENT_TIME}発 {START_NODE} → {TARGET_NODE}")  
-    print("="*40)  
-  
-    if not candidates:  
-        print("😱 残念ながら、一歩も動けません。")  
-    else:  
-        # 目的地に到着できたかチェック  
-        reached_target = any(c["station"] == "横浜" for c in candidates)  
-          
-        if reached_target:  
-            print("✅ 奇跡的に目的地まで行けます！通常ルート案内を表示します。")  
-        else:  
-            print("⚠️ 目的地には到達できませんでした。")  
-            print("👇 行けるところまでの候補（近い順）:")  
-            for i, c in enumerate(candidates[:3]): # 上位3件  
-                print(f"{i+1}. {c['station']} 駅")  
-                print(f"   到着: {c['arrival_time']}")  
-                print(f"   横浜まで残り: {c['distance_to_target_km']} km")  
-                print(f"   ----------------")  
