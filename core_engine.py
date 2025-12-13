@@ -1,6 +1,5 @@
 import pandas as pd  
 import math  
-from datetime import datetime, timedelta  
   
 # === 1. データ読み込み ===  
 print("📂 Loading data...")  
@@ -23,16 +22,18 @@ def get_station_id_from_name(name):
 def parse_time_to_minutes(time_str):  
     parts = list(map(int, time_str.split(':')))  
     h, m = parts[0], parts[1]  
+    # 24時越え対応  
     if h >= 24: h -= 24  
     return h * 60 + m  
   
 def format_minutes_to_time(minutes):  
     h = (minutes // 60)  
     m = minutes % 60  
+    # 24時を超えたら24:xx表記にする（深夜の実感を持たせるため）  
+    if h < 5: h += 24  
     return f"{h:02d}:{m:02d}"  
   
 def haversine_distance(lat1, lon1, lat2, lon2):  
-    """ 2点間の直線距離(km) """  
     R = 6371  
     phi1, phi2 = math.radians(lat1), math.radians(lat2)  
     dphi = math.radians(lat2 - lat1)  
@@ -43,36 +44,43 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))  
     return R * c  
   
-# === ★新機能: 厳密なタクシー料金計算ロジック ===  
-def calculate_taxi_fare(km_distance, is_night=True):  
+# === ★修正: タクシー料金計算ロジック（辛口設定） ===  
+def calculate_taxi_fare(km_distance, arrival_time_str):  
     """  
-    東京地区の公定運賃に近い計算を行う  
-    is_night: 深夜割増(22時-5時)を適用するか  
+    GOアプリ等の実勢価格に近づけるための補正入り計算  
     """  
-    # 1. 道路距離への補正 (直線距離 x 1.3倍)  
-    road_km = km_distance * 1.3  
+    # 1. 道路距離への補正 (直線距離 x 1.4倍)  
+    # 実際の道路は直線よりかなり長い + 高速利用などの可能性  
+    road_km = km_distance * 1.4  
       
     # メートル換算  
     meters = road_km * 1000  
       
-    # 2. 運賃計算 (2022年改定後の東京特定区準拠: 初乗り1.096km 500円)  
+    # 2. 運賃計算 (東京特定区準拠)  
     base_fare = 500  
     base_dist = 1096  
       
     if meters <= base_dist:  
         fare = base_fare  
     else:  
-        # 加算距離: 255mごとに100円  
         add_dist = meters - base_dist  
         add_unit = 255  
         add_count = math.ceil(add_dist / add_unit)  
         fare = base_fare + (add_count * 100)  
       
-    # 3. 深夜割増 (2割増)  
+    # 3. 深夜割増判定 (到着時刻ベース)  
+    # 文字列 "23:39" や "24:05" から時間を取得  
+    h = int(arrival_time_str.split(':')[0])  
+    # 22時〜5時は割増 (24時表記対応)  
+    is_night = (h >= 22 or h < 5 or h >= 24)  
+      
     if is_night:  
         fare = int(fare * 1.2)  
       
-    # 10円単位に丸める（タクシー仕様）  
+    # 4. 実勢価格補正 (迎車料金、信号待ち、渋滞などの時間距離併用運賃分)  
+    # これを入れないと安く出過ぎるため、さらに1.25倍する  
+    fare = int(fare * 1.25)  
+      
     return round(fare, -1)  
   
 # === 3. 探索ロジック ===  
@@ -97,11 +105,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
     else:  
         return {"error": "目的地が指定されていません。"}  
   
-    # 時間帯判定（深夜割増用）: 4時前なら深夜とみなす  
-    h = int(current_time_str.split(':')[0])  
-    is_night_time = (h >= 22 or h < 5 or h >= 24)  
-  
-    print(f"🔎 Search: {start_id} -> ({dest_lat}, {dest_lon}) @ {current_time_str}")  
+    print(f"🔎 Search: {start_id} -> ({dest_lat}, {dest_lon})")  
       
     current_minutes = parse_time_to_minutes(current_time_str)  
       
@@ -141,27 +145,32 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
   
     results = []  
     for station_id, data in reachable.items():  
-        if station_id == start_id: continue  
+        # ★修正: 出発駅も候補に含める (電車に乗らずタクシーに乗る選択肢)  
+        # if station_id == start_id: continue   
           
-        # 直線距離  
         st_lat = df_stops.loc[station_id, "stop_lat"]  
         st_lon = df_stops.loc[station_id, "stop_lon"]  
         dist_km = haversine_distance(st_lat, st_lon, dest_lat, dest_lon)  
           
-        # ★ここで厳密なタクシー料金を計算  
-        taxi_price = calculate_taxi_fare(dist_km, is_night=is_night_time)  
+        # 到着時刻の文字列を作る  
+        arr_time_str = format_minutes_to_time(data["arrival_time"])  
+          
+        # 料金計算に到着時刻を渡す（深夜判定用）  
+        taxi_price = calculate_taxi_fare(dist_km, arr_time_str)  
           
         st_name_jp = df_stops.loc[station_id, "stop_name"]  
   
+        # 評価スコア: タクシー料金が安い順を優先するが、移動回数も考慮  
+        # ここではシンプルに「タクシー料金」を主な指標にする  
         results.append({  
             "station": st_name_jp,  
-            "arrival_time": format_minutes_to_time(data["arrival_time"]),  
-            "distance_to_target_km": round(dist_km, 2), # 表示は直線距離のままでOK（目安）  
+            "arrival_time": arr_time_str,  
+            "distance_to_target_km": round(dist_km, 2),  
             "route_count": len(data["route"]),  
-            "taxi_price": taxi_price, # 追加: サーバー側で計算した正確な料金  
+            "taxi_price": taxi_price,  
             "last_stop_id": station_id  
         })  
       
-    # 料金が安い順、あるいは距離が近い順にソート（今回は距離優先）  
-    results.sort(key=lambda x: x["distance_to_target_km"])  
+    # 並び替え: タクシー料金が安い順  
+    results.sort(key=lambda x: x["taxi_price"])  
     return results  
