@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import math  
 import urllib.parse  
 import time  
-import re  # 正規表現ライブラリを追加  
+import re  
   
 # === 1. 駅位置データの読み込み ===  
 print("📂 Loading station data...")  
@@ -20,13 +20,12 @@ try:
         if row["stop_name"].endswith("駅"):  
             short = row["stop_name"][:-1]  
             station_coords[short] = station_coords[row["stop_name"]]  
-              
     print(f"✅ Loaded {len(station_coords)} stations.")  
 except:  
     print("❌ Error: data/stops.txt not found.")  
     station_coords = {}  
   
-# === 2. Yahoo!乗換案内 スクレイピング (修正版) ===  
+# === 2. Yahoo!乗換案内 スクレイピング (厳格モード) ===  
   
 def fetch_yahoo_route(start, goal, dt):  
     base_url = "https://transit.yahoo.co.jp/search/print"  
@@ -46,48 +45,56 @@ def fetch_yahoo_route(start, goal, dt):
     }  
       
     try:  
-        time.sleep(0.5) # アクセス負荷軽減  
+        time.sleep(0.5)   
         res = requests.get(base_url, params=params, timeout=5)  
         if res.status_code != 200: return None  
           
         soup = BeautifulSoup(res.text, 'html.parser')  
-          
-        # 経路サマリー取得  
         summary = soup.find("div", class_="routeSummary")  
         if not summary: return None  
   
-        # 時間取得  
         time_li = summary.find("li", class_="time")  
         if not time_li: return None  
           
-        time_text = time_li.text # 例: "23:58発 → 00:29着(31分)"  
-          
-        # ★修正: 正規表現で時刻(HH:MM)を2つ抜き出す  
-        # \d{1,2}:\d{2} というパターンを探す  
+        time_text = time_li.text   
         times = re.findall(r'(\d{1,2}:\d{2})', time_text)  
+        if len(times) < 2: return None   
           
-        if len(times) < 2: return None # 出発と到着が取れなかったらエラー  
+        dep_str = times[0]  
+        arr_str = times[1]  
           
-        dep_str = times[0] # 出発時刻  
-        arr_str = times[1] # 到着時刻  
-          
-        # 乗換回数  
         transfer_li = summary.find("li", class_="transfer")  
         transfers = 0  
         if transfer_li:  
-            t_text = transfer_li.text  
-            # 数字だけ抜き出す  
-            nums = re.findall(r'\d+', t_text)  
+            nums = re.findall(r'\d+', transfer_li.text)  
             if nums: transfers = int(nums[0])  
   
-        # 深夜判定  
-        dep_h = int(dep_str.split(':')[0])  
-        req_h = dt.hour  
+        # === ★修正: 厳密な時間チェック ===  
+        # 「検索した時間」と「実際の出発時間」の差を見る  
+        req_minutes = dt.hour * 60 + dt.minute  
           
-        # 23時検索 -> 05時出発 はNG (終電終わってる)  
-        if req_h >= 20 and 4 <= dep_h < 10: return None  
-        # 25時(01時)検索 -> 05時出発 はNG  
-        if req_h < 4 and 4 <= dep_h < 10: return None  
+        dep_h, dep_m = map(int, dep_str.split(':'))  
+        actual_dep_minutes = dep_h * 60 + dep_m  
+          
+        # 24時またぎの補正  
+        # 例: 検索23:50(1430分) -> 出発00:10(10分) の場合、出発は+1440して1450分とみなす  
+        if req_minutes > 1200 and actual_dep_minutes < 300: # 20時以降検索で、翌0~5時出発  
+            actual_dep_minutes += 1440  
+        elif req_minutes < 300 and actual_dep_minutes < req_minutes: # 深夜25時(1時)検索で、出発がそれより前(ありえないが)  
+             actual_dep_minutes += 1440  
+  
+        # 待ち時間 (分)  
+        wait_time = actual_dep_minutes - req_minutes  
+          
+        # 判定1: 待ち時間が120分(2時間)を超えるなら「始発待ち」とみなしてNG  
+        if wait_time > 120:   
+            # print(f"  [NG] Too long wait: {wait_time}min")  
+            return None  
+              
+        # 判定2: 日付またぎマーク [翌] があり、かつ深夜検索でない場合は警戒  
+        if "[翌]" in time_text and req_minutes < 1200:   
+             # 昼間に検索して翌日になるのはおかしい  
+             return None  
   
         return {  
             "found": True,  
@@ -133,9 +140,12 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
     try:  
         h, m = map(int, current_time_str.split(':'))  
         target_date = now  
+        # 24時越え対応 (25:00 -> 明日の01:00)  
         if h >= 24:  
             h -= 24  
             target_date = now + timedelta(days=1)  
+          
+        # 過去時刻補正は行わず、指定時刻で検索  
         search_dt = target_date.replace(hour=h, minute=m, second=0)  
     except:  
         search_dt = now  
@@ -151,7 +161,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
         d_from_start = haversine_distance(start_coords, coords)  
         d_to_goal = haversine_distance(coords, target_coords)  
           
-        # 楕円判定 (直進性チェック)  
+        # 直進性チェック  
         if (d_from_start + d_to_goal) < total_dist * 1.3:  
             candidates.append({  
                 "name": name,  
@@ -159,10 +169,10 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
                 "dist_goal": d_to_goal  
             })  
               
-    # 出発地から近い順にソート  
+    # 出発地から近い順  
     candidates.sort(key=lambda x: x["dist_start"])  
       
-    # 最大15駅に絞る  
+    # API制限対策で間引く  
     if len(candidates) > 15:  
         step = len(candidates) // 15  
         candidates = candidates[::step]  
@@ -190,7 +200,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
             }  
             left = mid + 1  
         else:  
-            print("NG ❌")  
+            print("NG (Wait > 2h or No Route) ❌")  
             right = mid - 1  
   
     results = []  
@@ -199,7 +209,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
         price = calculate_taxi_fare(best_station['dist'])  
         results.append({  
             "station": best_station['station'],  
-            "arrival_time": best_station['res']['arr'], # これで純粋な時刻だけになる  
+            "arrival_time": best_station['res']['arr'],  
             "distance_to_target_km": round(best_station['dist'], 2),  
             "route_count": best_station['res']['transfers'] + 1,  
             "taxi_price": price,  
