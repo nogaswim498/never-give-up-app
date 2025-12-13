@@ -181,19 +181,14 @@
     </div>  
   
     <script>  
-        // Service Workerの登録  
+        // Service Worker  
         if ('serviceWorker' in navigator) {  
-            navigator.serviceWorker.register('sw.js').catch(function(err) {  
-                console.log('SW registration failed: ', err);  
-            });  
+            navigator.serviceWorker.register('sw.js');  
         }  
   
-        // --- 初期化 ---  
         window.onload = function() {  
             setNow();   
             loadHomeData();  
-              
-            // 画面のどこかをタップしたらサジェストを消す  
             document.addEventListener('click', function(e) {  
                 if (!e.target.closest('.input-row')) {  
                     const s = document.getElementById('startSuggest');  
@@ -206,7 +201,6 @@
   
         let homeCoords = null;  
   
-        // --- 現在日時セット関数 ---  
         function setNow() {  
             const now = new Date();  
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());  
@@ -220,60 +214,71 @@
             }  
         }  
   
-        // ============================================================  
-        // ★ここが重要修正ポイント: JSONP方式によるサジェスト機能★  
-        // ============================================================  
+        // ==========================================  
+        // ★診断モード: JSONPサジェスト★  
+        // ==========================================  
         let suggestTimer = null;  
-        let currentListId = null;   // どのリストを更新するか  
-        let currentInputId = null;  // どの入力欄か  
+        let currentListId = null;  
+        let currentInputId = null;  
   
         function suggestStation(inputElement, listId) {  
             const keyword = inputElement.value;  
-            const listElement = document.getElementById(listId);  
+              
+            // 【診断1】入力イベントが発火しているか？  
+            // console.log("入力検知: " + keyword);   
   
-            // 2文字未満ならリストを隠して終了  
+            const listElement = document.getElementById(listId);  
             if (keyword.length < 2) {  
                 listElement.style.display = 'none';  
                 return;  
             }  
   
-            // 連打防止タイマー  
             clearTimeout(suggestTimer);  
             suggestTimer = setTimeout(() => {  
-                // コールバック関数で使うためにIDを記憶  
                 currentListId = listId;  
                 currentInputId = inputElement.id;  
   
-                // 既存のJSONPスクリプトがあれば削除  
                 const oldScript = document.getElementById('jsonp_script');  
                 if (oldScript) oldScript.remove();  
   
-                // 新しいスクリプトタグを作成 (これがfetchの代わりになる)  
+                // 【診断2】URLを作成  
+                const url = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}&jsonp=receiveStations`;  
+                // alert("通信します: " + keyword); // うざいのでコメントアウト  
+  
                 const script = document.createElement('script');  
                 script.id = 'jsonp_script';  
-                // URLの末尾に &jsonp=receiveStations をつけるのがルール  
-                script.src = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}&jsonp=receiveStations`;  
+                script.src = url;  
+                  
+                // エラーハンドリング追加  
+                script.onerror = function() {  
+                    alert("【エラー】スクリプトの読み込みに失敗しました。\nCSPやネットワーク制限の可能性があります。");  
+                };  
+  
                 document.body.appendChild(script);  
-            }, 300);  
+            }, 500); // 0.5秒待機  
         }  
   
-        // APIからデータが届くと、自動的にこの関数が実行されます  
+        // データ受信関数  
         window.receiveStations = function(data) {  
+            // 【診断3】データが届いたか？  
+            // alert("データ受信成功！");   
+  
             const listElement = document.getElementById(currentListId);  
             const inputElement = document.getElementById(currentInputId);  
               
             if (!listElement || !inputElement) return;  
   
             if (data.response && data.response.station) {  
+                // alert("駅が見つかりました: " + data.response.station.length + "件");  
                 renderSuggestList(data.response.station, listElement, inputElement);  
             } else {  
+                // alert("駅が見つかりませんでした (0件)");  
                 listElement.style.display = 'none';  
             }  
         };  
   
         function renderSuggestList(stations, listElement, inputElement) {  
             listElement.innerHTML = '';  
-            // 重複排除セット  
             const seen = new Set();  
               
             stations.forEach(st => {  
@@ -286,17 +291,15 @@
                 div.innerHTML = `${st.name} <span style="font-size:10px; color:#999;">(${st.line})</span>`;  
                   
                 div.onclick = function() {  
-                    inputElement.value = st.name; // 駅名をセット  
-                    listElement.style.display = 'none'; // リストを消す  
+                    inputElement.value = st.name;  
+                    listElement.style.display = 'none';  
                 };  
                 listElement.appendChild(div);  
             });  
             listElement.style.display = 'block';  
         }  
   
-        // ============================================================  
-  
-        // --- 設定・自宅登録 ---  
+        // ==========================================  
   
         function openSettings() {  
             document.getElementById('settingsModal').style.display = 'flex';  
@@ -338,8 +341,6 @@
             if (homeCoords) { document.getElementById('targetStation').value = "自宅"; }   
             else { alert("右上の⚙️設定ボタンから、自宅の住所を登録してください。"); openSettings(); }  
         }  
-  
-        // --- 検索処理 ---  
   
         async function searchRoute() {  
             const start = document.getElementById('startStation').value;  
