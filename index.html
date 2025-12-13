@@ -140,39 +140,31 @@
                 return;  
             }  
   
-            // 前方一致  
-            const hits = ALL_STATIONS.filter(st => st.n.startsWith(val));  
+            // ★修正: 漢字(n) または かな(k) で検索  
+            const hits = ALL_STATIONS.filter(st => {  
+                return st.n.startsWith(val) || (st.k && st.k.startsWith(val));  
+            });  
   
             if (hits.length === 0) {  
                 list.style.display = 'none';  
                 return;  
             }  
   
-            // 名寄せロジック (同じ駅名なら路線を結合する)  
+            // 名寄せ表示はそのまま  
             const grouped = {};  
             hits.forEach(st => {  
-                if (!grouped[st.n]) {  
-                    grouped[st.n] = [];  
-                }  
-                // 路線名が重複しないように追加  
-                if (!grouped[st.n].includes(st.l)) {  
-                    grouped[st.n].push(st.l);  
-                }  
+                if (!grouped[st.n]) { grouped[st.n] = []; }  
+                if (!grouped[st.n].includes(st.l)) { grouped[st.n].push(st.l); }  
             });  
   
             list.innerHTML = '';  
-              
-            // 上位10件を表示  
             let count = 0;  
             for (const [name, lines] of Object.entries(grouped)) {  
                 if (count >= 10) break;  
-                  
                 const div = document.createElement('div');  
                 div.className = 'suggest-item';  
-                // 路線名をスラッシュ区切りで表示  
                 const lineStr = lines.join(' / ');  
                 div.innerHTML = `<span>${name}</span> <span class="suggest-line">${lineStr}</span>`;  
-                  
                 div.onclick = function() {  
                     input.value = name;  
                     list.style.display = 'none';  
@@ -182,7 +174,7 @@
             }  
             list.style.display = 'block';  
         }  
-  
+          
         function setNow() {  
             const now = new Date();  
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());  
