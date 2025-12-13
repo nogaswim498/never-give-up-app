@@ -1,0 +1,157 @@
+新しいチャットで開発を再開する際は、**「プロジェクトの概要」「技術スタック」「現在の主要コード」**を一度に渡すのが最も効率的です。
+
+以下のテキストをコピーして、新しいチャットの最初に貼り付けてください。これを伝えれば、どのAIでも即座に現在の状況を理解し、続きから開発をサポートできます。
+
+以下のテキストをコピーして使用してください
+[開発コンテキスト共有] 終電救済アプリ「Never!諦めない案内」
+
+現在、以下の仕様でWebアプリを開発しており、機能実装は一旦完了しています。
+今後の修正や機能追加のサポートをお願いします。
+
+1. プロジェクト概要
+
+アプリ名: Never!諦めない案内
+目的: 終電を逃した際、目的地まで到達できなくても「行けるところまで行くルート」を検索し、残りの距離とタクシー料金を表示する。
+主な機能:
+ODPT（公共交通オープンデータ）を利用したリアルな時刻表探索。
+関東全域（約3000駅）のサジェスト入力（内蔵JSON使用）。
+自宅住所の登録と緯度経度保存。
+深夜（24時〜27時）の時刻またぎに対応した経路探索。
+PWA対応。
+2. 技術スタック
+
+Frontend: HTML5, CSS3, Vanilla JavaScript (フレームワークなし)
+Backend: Python 3.10+, FastAPI, Pandas
+Infrastructure: Render (Web Service), UptimeRobot (スリープ回避)
+Data Source: ODPT API (時刻表), HeartRails Express API (駅座標取得用スクリプト)
+3. ディレクトリ構成
+
+/  
+├── main.py (FastAPIエントリーポイント)  
+├── core_engine.py (経路探索・料金計算ロジック)  
+├── index.html (フロントエンド・UI)  
+├── fetch_stations.py (駅データ取得・JSON生成用スクリプト)  
+├── fetch_odpt.py (ODPT時刻表取得用スクリプト)  
+├── generate_mock_data.py (テストデータ生成用)  
+├── sw.js (PWA Service Worker)  
+├── manifest.json (PWA Manifest)  
+└── data/ (生成されたデータフォルダ)  
+    ├── stations_kanto.json (フロント用駅リスト)  
+    ├── stops.txt (バックエンド用駅座標)  
+    └── stop_times.txt (バックエンド用時刻表)  
+4. 主要コードの現状
+
+main.py:
+
+Copy Code
+python
+Double-click code to copy
+from fastapi import FastAPI  
+from fastapi.responses import FileResponse  
+from fastapi.staticfiles import StaticFiles  
+from pydantic import BaseModel  
+from fastapi.middleware.cors import CORSMiddleware  
+import core_engine  
+import os  
+from typing import Optional  
+  
+app = FastAPI(title="Never!諦めない案内 API")  
+  
+app.add_middleware(  
+    CORSMiddleware,  
+    allow_origins=["*"],  
+    allow_credentials=True,  
+    allow_methods=["*"],  
+    allow_headers=["*"],  
+)  
+  
+app.mount("/data", StaticFiles(directory="data"), name="data")  
+  
+class SearchRequest(BaseModel):  
+    start_station: str  
+    target_station: str  
+    current_time: str  
+    target_lat: Optional[float] = None  
+    target_lon: Optional[float] = None  
+  
+@app.get("/")  
+def read_root(): return FileResponse("index.html", media_type="text/html")  
+@app.get("/manifest.json")  
+def read_manifest(): return FileResponse("manifest.json", media_type="application/manifest+json")  
+@app.get("/sw.js")  
+def read_sw(): return FileResponse("sw.js", media_type="application/javascript")  
+@app.get("/icon.png")  
+def read_icon():  
+    if os.path.exists("icon.png"): return FileResponse("icon.png", media_type="image/png")  
+    return {"error": "not found"}  
+@app.get("/favicon.ico")  
+def read_favicon():  
+    if os.path.exists("icon.png"): return FileResponse("icon.png", media_type="image/png")  
+    return FileResponse("index.html")  
+  
+@app.post("/search")  
+def search_route(req: SearchRequest):  
+    results = core_engine.search_routes(  
+        start_name=req.start_station,  
+        current_time_str=req.current_time,  
+        target_name=req.target_station,  
+        target_lat=req.target_lat,  
+        target_lon=req.target_lon  
+    )  
+    if isinstance(results, dict) and "error" in results:  
+        return {"status": "error", "message": results["error"], "candidates": []}  
+      
+    is_reachable = False  
+    if results:  
+        top = results[0]  
+        if top["distance_to_target_km"] < 1.0:  
+            is_reachable = True  
+  
+    return {  
+        "status": "success",  
+        "is_target_reachable": is_reachable,  
+        "search_condition": {  
+            "start": req.start_station,  
+            "target": req.target_station,  
+            "time": req.current_time  
+        },  
+        "candidates": results,  
+        "message": "検索完了しました"  
+    }  
+core_engine.py (抜粋: 高速化と深夜対応済み):
+
+Copy Code
+python
+Double-click code to copy
+import pandas as pd  
+import math  
+from datetime import datetime, timedelta  
+  
+# データ読み込みと辞書化による高速化処理済み  
+try:  
+    df_stops = pd.read_csv("data/stops.txt")  
+    name_to_id = {}   
+    # (駅名の揺らぎ吸収処理...)  
+    df_stops = df_stops.set_index("stop_id")  
+    df_times = pd.read_csv("data/stop_times.txt")  
+    timetable_dict = {} # {stop_id: [rows]}  
+    trip_dict = {} # {trip_id: [rows sorted by seq]}  
+    # (groupbyによる辞書生成処理...)  
+except FileNotFoundError:  
+    pass  
+  
+# ユーティリティ: parse_time_to_minutes (24時越えはそのまま加算), haversine_distance, calculate_taxi_fare  
+# 探索ロジック: BFS探索 (MAX_EXPLORE制限あり), 到達駅からのタクシー料金計算  
+index.html:
+data/stations_kanto.json を読み込んでサジェスト表示する機能、およびPWA、現在地時刻設定、自宅登録（LocalStorage）機能を実装済み。
+
+現状のステータス:
+ODPTから取得した数万件の時刻表データ（fetch_odpt.pyで生成）と、HeartRailsから取得した関東全駅データ（fetch_stations.pyで生成）を使用し、正常に動作しています。
+
+この続きから修正・拡張を行いたいです。
+💡 補足アドバイス
+データファイルについて:
+data フォルダの中身（数万行のCSVなど）はチャットに貼り付けるには大きすぎます。「データファイルは既に手元にあり、スクリプトで生成済みである」とAIに認識させればOKです。
+もし機能追加するなら:
+次にチャットを始めるとき、「上記を踏まえて、〇〇という機能を追加したい」と言えば、スムーズにコードを提示してくれます。
+素晴らしいアプリ開発でした！またいつでもサポートします。
