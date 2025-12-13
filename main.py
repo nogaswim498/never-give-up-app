@@ -17,16 +17,13 @@ app.add_middleware(
     allow_headers=["*"],  
 )  
   
-# リクエスト定義の更新: 座標を受け取れるようにする  
 class SearchRequest(BaseModel):  
     start_station: str  
     target_station: str  
     current_time: str  
-    # 追加: 座標 (任意項目)  
-    target_lat: Optional[float] = None  
-    target_lon: Optional[float] = None  
+    target_lat: Optional[float] = None # 追加  
+    target_lon: Optional[float] = None # 追加  
   
-# --- 静的ファイル配信 ---  
 @app.get("/")  
 def read_root(): return FileResponse("index.html", media_type="text/html")  
 @app.get("/manifest.json")  
@@ -42,11 +39,8 @@ def read_favicon():
     if os.path.exists("icon.png"): return FileResponse("icon.png", media_type="image/png")  
     return FileResponse("index.html")  
   
-# --- 検索API ---  
 @app.post("/search")  
 def search_route(req: SearchRequest):  
-      
-    # 探索エンジンに投げる  
     results = core_engine.search_routes(  
         start_name=req.start_station,  
         current_time_str=req.current_time,  
@@ -55,7 +49,6 @@ def search_route(req: SearchRequest):
         target_lon=req.target_lon  
     )  
       
-    # エラーチェック (resultsが辞書でerrorキーを持つ場合)  
     if isinstance(results, dict) and "error" in results:  
         return {  
             "status": "error",  

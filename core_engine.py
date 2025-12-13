@@ -21,13 +21,11 @@ except FileNotFoundError:
   
 def get_station_id_from_name(name):  
     """ 日本語駅名からIDを取得。見つからなければそのまま返す """  
-    # 完全一致検索  
     if name in name_to_id:  
         return name_to_id[name]  
-    # "駅"がついている場合への対応 ("新宿駅" -> "新宿" -> "Shinjuku")  
     if name.endswith("駅") and name[:-1] in name_to_id:  
         return name_to_id[name[:-1]]  
-    return name # 英語IDそのままで来た場合など  
+    return name  
   
 def parse_time_to_minutes(time_str):  
     parts = list(map(int, time_str.split(':')))  
@@ -55,12 +53,6 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 # === 3. 探索ロジック ===  
   
 def search_routes(start_name, current_time_str, target_name=None, target_lat=None, target_lon=None):  
-    """  
-    target_name: 駅名 (例: Yokohama)  
-    target_lat/lon: 座標 (自宅など)  
-    ※ どちらかが必須  
-    """  
-      
     # 出発駅の名前をIDに変換  
     start_id = get_station_id_from_name(start_name)  
       
@@ -70,13 +62,11 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
     # ターゲットの座標を確定させる  
     dest_lat = 0.0  
     dest_lon = 0.0  
-    dest_name_display = "目的地"  
   
     if target_lat is not None and target_lon is not None:  
         # 座標指定（自宅）の場合  
         dest_lat = target_lat  
         dest_lon = target_lon  
-        dest_name_display = "自宅"  
     elif target_name:  
         # 駅名指定の場合  
         target_id = get_station_id_from_name(target_name)  
@@ -84,7 +74,6 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
             return {"error": f"到着駅 '{target_name}' がデータに見つかりません。"}  
         dest_lat = df_stops.loc[target_id, "stop_lat"]  
         dest_lon = df_stops.loc[target_id, "stop_lon"]  
-        dest_name_display = target_name  
     else:  
         return {"error": "目的地が指定されていません。"}  
   
@@ -92,7 +81,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
       
     current_minutes = parse_time_to_minutes(current_time_str)  
       
-    # BFS探索 (到達可能な駅を全列挙)  
+    # BFS探索  
     reachable = {  
         start_id: {"arrival_time": current_minutes, "route": [start_id]}  
     }  
@@ -135,20 +124,18 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
   
     # 結果作成  
     results = []  
-      
     for station_id, data in reachable.items():  
         if station_id == start_id: continue  
           
-        # 到達した駅から、目的地（自宅座標 or 駅座標）への距離  
+        # 距離計算  
         st_lat = df_stops.loc[station_id, "stop_lat"]  
         st_lon = df_stops.loc[station_id, "stop_lon"]  
         dist = haversine_distance(st_lat, st_lon, dest_lat, dest_lon)  
           
-        # 駅名（日本語）を取得  
         st_name_jp = df_stops.loc[station_id, "stop_name"]  
   
         results.append({  
-            "station": st_name_jp, # 表示用  
+            "station": st_name_jp,  
             "arrival_time": format_minutes_to_time(data["arrival_time"]),  
             "distance_to_target_km": round(dist, 2),  
             "route_count": len(data["route"]),  
