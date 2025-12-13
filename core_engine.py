@@ -1,194 +1,224 @@
 import pandas as pd  
-import math  
+import requests  
+from bs4 import BeautifulSoup  
 from datetime import datetime, timedelta  
+import math  
+import urllib.parse  
+import time  
   
-# === 1. データ読み込み ===  
-print("📂 Loading data...")  
+# === 1. 駅位置データの読み込み ===  
+print("📂 Loading station data...")  
 try:  
     df_stops = pd.read_csv("data/stops.txt")  
-    name_to_id = {}  
+    station_coords = {}  
     for _, row in df_stops.iterrows():  
-        name_to_id[row["stop_name"]] = row["stop_id"]  
+        station_coords[row["stop_name"]] = {  
+            "lat": row["stop_lat"],  
+            "lon": row["stop_lon"]  
+        }  
         if row["stop_name"].endswith("駅"):  
-            name_to_id[row["stop_name"][:-1]] = row["stop_id"]  
+            short = row["stop_name"][:-1]  
+            station_coords[short] = station_coords[row["stop_name"]]  
               
-    df_stops = df_stops.set_index("stop_id")  
-      
-    # 時刻表  
-    df_times = pd.read_csv("data/stop_times.txt")  
-      
-    # 辞書化  
-    timetable_dict = {}  
-    for stop_id, group in df_times.groupby("stop_id"):  
-        timetable_dict[stop_id] = group.to_dict('records')  
-          
-    trip_dict = {}  
-    for trip_id, group in df_times.groupby("trip_id"):  
-        trip_dict[trip_id] = group.sort_values("stop_sequence").to_dict('records')  
-          
-    print(f"✅ Ready: {len(timetable_dict)} stations")  
+    print(f"✅ Loaded {len(station_coords)} stations.")  
+except:  
+    print("❌ Error: data/stops.txt not found.")  
+    station_coords = {}  
   
-except FileNotFoundError:  
-    print("❌ Error: Data not found.")  
-    name_to_id = {}  
-    timetable_dict = {}  
-    trip_dict = {}  
+# === 2. Yahoo!乗換案内 スクレイピング ===  
   
-# === 2. ユーティリティ ===  
-  
-def get_station_id_from_name(name):  
-    if name in name_to_id: return name_to_id[name]  
-    if name.endswith("駅") and name[:-1] in name_to_id: return name_to_id[name[:-1]]  
-    if not name.endswith("駅") and (name+"駅") in name_to_id: return name_to_id[name+"駅"]  
-    return name  
-  
-def parse_time_to_minutes(time_str):  
-    try:  
-        parts = list(map(int, time_str.split(':')))  
-        h, m = parts[0], parts[1]  
-        # 入力やデータが "0:30" などの場合、検索のために "24:30" として扱う  
-        if h < 4: h += 24  
-        return h * 60 + m  
-    except: return 99999  
-  
-def format_minutes_to_time(minutes):  
-    """   
-    分を HH:MM 表記に戻す   
-    ★修正: 24で割った余りを使って、必ず 0:00 〜 23:59 の表記にする  
+def fetch_yahoo_route(start, goal, dt):  
     """  
-    h = (minutes // 60) % 24 # 24->0, 25->1, 26->2...  
-    m = minutes % 60  
-    return f"{h:02d}:{m:02d}"  
+    Yahoo!乗換案内をスクレイピングして、指定時刻に経路があるか判定する  
+    """  
+    base_url = "https://transit.yahoo.co.jp/search/print"  
+    params = {  
+        "from": start,  
+        "to": goal,  
+        "y": dt.year,  
+        "m": str(dt.month).zfill(2),  
+        "d": str(dt.day).zfill(2),  
+        "hh": str(dt.hour).zfill(2),  
+        "m1": str(dt.minute // 10),  
+        "m2": str(dt.minute % 10),  
+        "type": "1", # 指定時刻 出発  
+        "s": "0",    # 到着順  
+        "ws": "3",   # 標準  
+        "no": "1",   # 1件  
+    }  
+      
+    try:  
+        # 少しウェイトを入れる（連続アクセス対策）  
+        time.sleep(0.5)  
+          
+        res = requests.get(base_url, params=params, timeout=5)  
+        if res.status_code != 200: return None  
+          
+        soup = BeautifulSoup(res.text, 'html.parser')  
+          
+        # 経路があるか  
+        summary = soup.find("div", class_="routeSummary")  
+        if not summary: return None  
   
-def haversine_distance(lat1, lon1, lat2, lon2):  
+        # 時間チェック  
+        time_li = summary.find("li", class_="time")  
+        if not time_li: return None  
+          
+        time_text = time_li.text # "23:58発 → 00:29着"  
+        times = time_text.replace("発", "").replace("着", "").split("→")  
+        dep_str = times[0].strip()  
+        arr_str = times[1].strip()  
+          
+        # 乗換回数  
+        transfer_li = summary.find("li", class_="transfer")  
+        transfers = 0  
+        if transfer_li:  
+            t_text = transfer_li.text.replace("乗換：", "").replace("回", "").strip()  
+            if t_text.isdigit(): transfers = int(t_text)  
+  
+        # 深夜判定 (検索時刻より大幅に未来＝翌朝ならNG)  
+        dep_h = int(dep_str.split(':')[0])  
+        req_h = dt.hour  
+          
+        # 23時検索 -> 05時出発 はNG (終電終わってる)  
+        if req_h >= 20 and 4 <= dep_h < 10: return None  
+        # 25時(01時)検索 -> 05時出発 はNG  
+        if req_h < 4 and 4 <= dep_h < 10: return None  
+  
+        return {  
+            "found": True,  
+            "dep": dep_str,  
+            "arr": arr_str,  
+            "transfers": transfers  
+        }  
+  
+    except Exception as e:  
+        print(f"Scraping Error: {e}")  
+        return None  
+  
+# === 3. 距離・料金 ===  
+  
+def haversine_distance(c1, c2):  
     R = 6371  
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)  
-    dphi = math.radians(lat2 - lat1)  
-    dlambda = math.radians(lon2 - lon1)  
-    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2  
+    lat1, lon1 = math.radians(c1["lat"]), math.radians(c1["lon"])  
+    lat2, lon2 = math.radians(c2["lat"]), math.radians(c2["lon"])  
+    a = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin((lon2-lon1)/2)**2  
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))  
     return R * c  
   
-def calculate_taxi_fare(km_distance, arrival_time_str):  
-    if km_distance < 0.1: return 0   
-    road_km = km_distance * 1.4  
-    base_fare = 500  
-    base_dist = 1.096  
-      
-    if road_km <= base_dist: fare = base_fare  
-    else:  
-        fare = base_fare + (math.ceil(((road_km - base_dist) * 1000) / 255) * 100)  
-      
-    try:  
-        h = int(arrival_time_str.split(':')[0])  
-        # 22時〜5時は深夜割増  
-        if h >= 22 or h < 5: fare = int(fare * 1.2)  
-    except: pass  
-      
-    return round(fare * 1.1, -1)  
+def calculate_taxi_fare(km):  
+    if km < 0.1: return 0  
+    fare = 500  
+    road_km = km * 1.4  
+    if road_km > 1.096:  
+        fare += math.ceil(((road_km * 1000) - 1096) / 255) * 100  
+    return round(fare * 1.2 * 1.1, -1)  
   
-# === 3. 探索ロジック ===  
+# === 4. 探索ロジック (Binary Search) ===  
   
 def search_routes(start_name, current_time_str, target_name=None, target_lat=None, target_lon=None):  
-    start_id = get_station_id_from_name(start_name)  
-    if start_id not in name_to_id:  
-        return {"error": f"出発駅 '{start_name}' が見つかりません。"}  
-  
-    dest_lat, dest_lon = 0.0, 0.0  
-    if target_lat:  
-        dest_lat, dest_lon = target_lat, target_lon  
-    elif target_name:  
-        tid = get_station_id_from_name(target_name)  
-        if tid in df_stops.index:  
-            dest_lat = df_stops.loc[tid, "stop_lat"]  
-            dest_lon = df_stops.loc[tid, "stop_lon"]  
+    # 1. 座標特定  
+    start_coords = station_coords.get(start_name)  
+    target_coords = None  
+    if target_lat: target_coords = {"lat": target_lat, "lon": target_lon}  
+    elif target_name and target_name in station_coords: target_coords = station_coords[target_name]  
       
-    if dest_lat == 0: return {"error": "目的地が不明です。"}  
+    if not start_coords or not target_coords:  
+        return {"error": "駅の場所が特定できません。"}  
   
-    print(f"🔎 Search: {start_id} -> Target ({current_time_str})")  
+    # 2. 日時設定  
+    now = datetime.now()  
+    try:  
+        h, m = map(int, current_time_str.split(':'))  
+        target_date = now  
+        if h >= 24:  
+            h -= 24  
+            target_date = now + timedelta(days=1)  
+        search_dt = target_date.replace(hour=h, minute=m, second=0)  
+    except:  
+        search_dt = now  
+  
+    print(f"🔎 Solving: {start_name} -> {target_name or 'Home'} @ {search_dt}")  
+  
+    # 3. 候補駅の抽出 (直線上の駅)  
+    candidates = []  
+    total_dist = haversine_distance(start_coords, target_coords)  
       
-    # ユーザー入力時間を内部計算用の分に変換  
-    current_minutes = parse_time_to_minutes(current_time_str)  
-      
-    # BFS  
-    reachable = {start_id: {"arrival_time": current_minutes, "route": [start_id]}}  
-    queue = [start_id]  
-    processed_trips = set()  
-      
-    MAX_EXPLORE = 10000   
-    count = 0  
-  
-    while queue and count < MAX_EXPLORE:  
-        curr = queue.pop(0)  
-        count += 1  
-        curr_arr = reachable[curr]["arrival_time"]  
+    for name, coords in station_coords.items():  
+        if name == start_name: continue  
+        d_from_start = haversine_distance(start_coords, coords)  
+        d_to_goal = haversine_distance(coords, target_coords)  
           
-        # 翌朝まで行ったら打ち切り (30時間制で判定)  
-        if curr_arr > 1800: continue   
-  
-        departures = timetable_dict.get(curr, [])  
-          
-        for dep in departures:  
-            trip_id = dep["trip_id"]  
-            if trip_id in processed_trips: continue  
-              
-            dep_time = parse_time_to_minutes(dep["departure_time"])  
-              
-            # まだ出発していない電車に乗る  
-            if dep_time >= curr_arr:  
-                processed_trips.add(trip_id)  
-                  
-                full_trip = trip_dict.get(trip_id, [])  
-                curr_seq = dep["stop_sequence"]  
-                  
-                for stop in full_trip:  
-                    if stop["stop_sequence"] > curr_seq:  
-                        next_st = stop["stop_id"]  
-                        arr_time = parse_time_to_minutes(stop["arrival_time"])  
-                          
-                        is_new = (next_st not in reachable)  
-                        is_faster = False  
-                        if not is_new:  
-                            is_faster = (arr_time < reachable[next_st]["arrival_time"])  
-                          
-                        if is_new or is_faster:  
-                            reachable[next_st] = {  
-                                "arrival_time": arr_time,  
-                                "route": reachable[curr]["route"] + [next_st]  
-                            }  
-                            queue.append(next_st)  
-  
-    # 結果集計  
-    results = []  
-    if start_id in df_stops.index:  
-        slat = df_stops.loc[start_id, "stop_lat"]  
-        slon = df_stops.loc[start_id, "stop_lon"]  
-        start_dist = haversine_distance(slat, slon, dest_lat, dest_lon)  
-    else:  
-        start_dist = 9999  
-  
-    for sid, data in reachable.items():  
-        if sid == start_id: continue  
-        if sid not in df_stops.index: continue  
-          
-        lat = df_stops.loc[sid, "stop_lat"]  
-        lon = df_stops.loc[sid, "stop_lon"]  
-        dist = haversine_distance(lat, lon, dest_lat, dest_lon)  
-          
-        # 近づいた駅のみ  
-        if dist < start_dist:  
-            # ★ここで 00:xx 表記に変換される  
-            arr_str = format_minutes_to_time(data["arrival_time"])  
-            price = calculate_taxi_fare(dist, arr_str)  
-              
-            results.append({  
-                "station": sid,  
-                "arrival_time": arr_str,  
-                "distance_to_target_km": round(dist, 2),  
-                "route_count": len(data["route"]),  
-                "taxi_price": price,  
-                "last_stop_id": sid  
+        # 楕円判定 (経路上にある駅)  
+        if (d_from_start + d_to_goal) < total_dist * 1.3:  
+            candidates.append({  
+                "name": name,  
+                "dist_start": d_from_start,  
+                "dist_goal": d_to_goal  
             })  
               
-    results.sort(key=lambda x: x["distance_to_target_km"])  
-    return results[:10]  
+    # ★重要: 二分探索のために「出発地に近い順（距離昇順）」にソートする  
+    candidates.sort(key=lambda x: x["dist_start"])  
+      
+    # 駅が多すぎると処理しきれないので、最大15駅程度に間引く  
+    if len(candidates) > 15:  
+        step = len(candidates) // 15  
+        candidates = candidates[::step]  
+          
+    print(f"  Target Stations ({len(candidates)}): {[c['name'] for c in candidates]}")  
+  
+    # === 4. 二分探索 (Binary Search) ===  
+    # left = 近い駅, right = 遠い駅  
+    # 「行ける」なら right(遠く) へ、「行けない」なら left(手前) へ  
+      
+    left = 0  
+    right = len(candidates) - 1  
+    best_station = None # 行ける中で一番遠い駅  
+      
+    while left <= right:  
+        mid = (left + right) // 2  
+        target_cand = candidates[mid]  
+          
+        print(f"  Checking: {target_cand['name']} ... ", end="")  
+          
+        res = fetch_yahoo_route(start_name, target_cand['name'], search_dt)  
+          
+        if res:  
+            print("OK (Go Further) ✅")  
+            # 行けた！ これを暫定一位にして、もっと遠くを目指す  
+            best_station = {  
+                "station": target_cand['name'],  
+                "res": res,  
+                "dist": target_cand['dist_goal']  
+            }  
+            left = mid + 1  
+        else:  
+            print("NG (Pull Back) ❌")  
+            # 行けない。もっと手前を探す  
+            right = mid - 1  
+  
+    results = []  
+      
+    if best_station:  
+        # 限界駅  
+        price = calculate_taxi_fare(best_station['dist'])  
+        results.append({  
+            "station": best_station['station'],  
+            "arrival_time": best_station['res']['arr'],  
+            "distance_to_target_km": round(best_station['dist'], 2),  
+            "route_count": best_station['res']['transfers'] + 1,  
+            "taxi_price": price,  
+            "last_stop_id": "LIMIT"  
+        })  
+    else:  
+        # 一歩も動けない  
+        results.append({  
+            "station": start_name,  
+            "arrival_time": "移動不可",  
+            "distance_to_target_km": round(total_dist, 2),  
+            "route_count": 0,  
+            "taxi_price": calculate_taxi_fare(total_dist),  
+            "last_stop_id": "START"  
+        })  
+  
+    return results  
