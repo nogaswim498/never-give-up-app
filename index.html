@@ -215,35 +215,37 @@
         // --- サジェスト機能 (HeartRails Express API) ---  
         let suggestTimer = null;  
   
-        function suggestStation(inputElement, listId) {  
+        async function suggestStation(inputElement, listId) {  
             const keyword = inputElement.value;  
-            const listElement = document.getElementById(listId);  
+            // デバッグ1: そもそも関数が呼ばれているか確認  
+            // alert("入力検知: " + keyword);   
   
-            if (keyword.length < 2) {  
-                listElement.style.display = 'none';  
-                return;  
-            }  
+            if (keyword.length < 2) return;  
   
-            // API連打を防ぐタイマー処理  
-            clearTimeout(suggestTimer);  
-            suggestTimer = setTimeout(async () => {  
-                try {  
-                    // JSONPを使わずCORS対応のエンドポイントがあればいいが、HeartRailsはJSON対応  
-                    const url = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}`;  
-                    const res = await fetch(url);  
-                    const data = await res.json();  
+            try {  
+                const url = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}`;  
+                  
+                // デバッグ2: 通信直前  
+                console.log("通信開始: " + url);  
   
-                    if (data.response && data.response.station) {  
-                        renderSuggestList(data.response.station, listElement, inputElement);  
-                    } else {  
-                        listElement.style.display = 'none';  
-                    }  
-                } catch (e) {  
-                    console.error("Suggest Error:", e);  
+                const res = await fetch(url);  
+                const data = await res.json();  
+  
+                // デバッグ3: データが取れたか  
+                // alert("データ取得成功: " + JSON.stringify(data).substring(0, 50));  
+  
+                const listElement = document.getElementById(listId);  
+                if (data.response && data.response.station) {  
+                    renderSuggestList(data.response.station, listElement, inputElement);  
+                } else {  
+                    listElement.style.display = 'none';  
                 }  
-            }, 300); // 0.3秒待ってから検索  
+            } catch (e) {  
+                // ★ここでエラー内容が表示されます  
+                alert("エラー発生: " + e);  
+            }  
         }  
-  
+          
         function renderSuggestList(stations, listElement, inputElement) {  
             listElement.innerHTML = '';  
             // 同じ駅名が複数路線である場合があるので重複除外するか、路線名を表示する  
