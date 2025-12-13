@@ -44,19 +44,20 @@ def get_station_id_from_name(name):
   
 def parse_time_to_minutes(time_str):  
     try:  
-        # "24:30:00" -> 1470  
         parts = list(map(int, time_str.split(':')))  
         h, m = parts[0], parts[1]  
-        # データ生成時に既に24時加算されている前提  
+        # 入力やデータが "0:30" などの場合、検索のために "24:30" として扱う  
+        if h < 4: h += 24  
         return h * 60 + m  
     except: return 99999  
   
 def format_minutes_to_time(minutes):  
-    """ 分を HH:MM 表記に戻す (24時越え対応) """  
-    h = (minutes // 60)  
+    """   
+    分を HH:MM 表記に戻す   
+    ★修正: 24で割った余りを使って、必ず 0:00 〜 23:59 の表記にする  
+    """  
+    h = (minutes // 60) % 24 # 24->0, 25->1, 26->2...  
     m = minutes % 60  
-    # 24時を超えていたらそのまま表示 (例: 25:10)  
-    # バグ修正: ゼロ埋めを確実に行う  
     return f"{h:02d}:{m:02d}"  
   
 def haversine_distance(lat1, lon1, lat2, lon2):  
@@ -69,7 +70,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     return R * c  
   
 def calculate_taxi_fare(km_distance, arrival_time_str):  
-    if km_distance < 0.1: return 0 # 距離ゼロなら無料  
+    if km_distance < 0.1: return 0   
     road_km = km_distance * 1.4  
     base_fare = 500  
     base_dist = 1.096  
@@ -80,7 +81,8 @@ def calculate_taxi_fare(km_distance, arrival_time_str):
       
     try:  
         h = int(arrival_time_str.split(':')[0])  
-        if h >= 22 or h < 5 or h >= 24: fare = int(fare * 1.2)  
+        # 22時〜5時は深夜割増  
+        if h >= 22 or h < 5: fare = int(fare * 1.2)  
     except: pass  
       
     return round(fare * 1.1, -1)  
@@ -105,11 +107,8 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
   
     print(f"🔎 Search: {start_id} -> Target ({current_time_str})")  
       
-    # ユーザー入力(0:30)を24:30に変換して検索  
-    parts = list(map(int, current_time_str.split(':')))  
-    h, m = parts[0], parts[1]  
-    if h < 4: h += 24  
-    current_minutes = h * 60 + m  
+    # ユーザー入力時間を内部計算用の分に変換  
+    current_minutes = parse_time_to_minutes(current_time_str)  
       
     # BFS  
     reachable = {start_id: {"arrival_time": current_minutes, "route": [start_id]}}  
@@ -124,7 +123,7 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
         count += 1  
         curr_arr = reachable[curr]["arrival_time"]  
           
-        # 翌朝まで行ったら打ち切り  
+        # 翌朝まで行ったら打ち切り (30時間制で判定)  
         if curr_arr > 1800: continue   
   
         departures = timetable_dict.get(curr, [])  
@@ -176,8 +175,9 @@ def search_routes(start_name, current_time_str, target_name=None, target_lat=Non
         lon = df_stops.loc[sid, "stop_lon"]  
         dist = haversine_distance(lat, lon, dest_lat, dest_lon)  
           
-        # 近づいた駅のみ (距離が短くなっていること)  
+        # 近づいた駅のみ  
         if dist < start_dist:  
+            # ★ここで 00:xx 表記に変換される  
             arr_str = format_minutes_to_time(data["arrival_time"])  
             price = calculate_taxi_fare(dist, arr_str)  
               
