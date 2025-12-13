@@ -101,40 +101,22 @@
     </div>  
   
     <script>  
-        // Service Worker  
         if ('serviceWorker' in navigator) {  
             navigator.serviceWorker.register('sw.js');  
         }  
   
-        // ★関東の主要駅データ (内蔵DB: 名前, 読み, 路線)  
-        // 外部通信しないので爆速かつ確実です  
-        const PRESET_STATIONS = [  
-            {n:"新宿", k:"しんじゅく", l:"JR/小田急/京王"}, {n:"渋谷", k:"しぶや", l:"JR/東急/京王"}, {n:"池袋", k:"いけぶくろ", l:"JR/西武/東武"},  
-            {n:"東京", k:"とうきょう", l:"JR/メトロ"}, {n:"品川", k:"しながわ", l:"JR/京急"}, {n:"横浜", k:"よこはま", l:"JR/東急/相鉄"},  
-            {n:"上野", k:"うえの", l:"JR/メトロ"}, {n:"秋葉原", k:"あきはばら", l:"JR/つくば"}, {n:"新橋", k:"しんばし", l:"JR/メトロ"},  
-            {n:"大宮", k:"おおみや", l:"JR/東武"}, {n:"川崎", k:"かわさき", l:"JR/京急"}, {n:"船橋", k:"ふなばし", l:"JR/東武"},  
-            {n:"立川", k:"たちかわ", l:"JR"}, {n:"八王子", k:"はちおうじ", l:"JR/京王"}, {n:"吉祥寺", k:"きちじょうじ", l:"JR/京王"},  
-            {n:"中野", k:"なかの", l:"JR/メトロ"}, {n:"三鷹", k:"みたか", l:"JR"}, {n:"町田", k:"まちだ", l:"JR/小田急"},  
-            {n:"北千住", k:"きたせんじゅ", l:"JR/東武/メトロ"}, {n:"西船橋", k:"にしふなばし", l:"JR/メトロ"}, {n:"柏", k:"かしわ", l:"JR/東武"},  
-            {n:"津田沼", k:"つだぬま", l:"JR"}, {n:"千葉", k:"ちば", l:"JR/モノレール"}, {n:"松戸", k:"まつど", l:"JR"},  
-            {n:"浦和", k:"うらわ", l:"JR"}, {n:"赤羽", k:"あかばね", l:"JR"}, {n:"武蔵小杉", k:"むさしこすぎ", l:"JR/東急"},  
-            {n:"自由が丘", k:"じゆうがおか", l:"東急"}, {n:"中目黒", k:"なかめぐろ", l:"東急/メトロ"}, {n:"二子玉川", k:"ふたこたまがわ", l:"東急"},  
-            {n:"溝の口", k:"みぞのくち", l:"東急/JR"}, {n:"登戸", k:"のぼりと", l:"小田急/JR"}, {n:"新百合ヶ丘", k:"しんゆりがおか", l:"小田急"},  
-            {n:"海老名", k:"えびな", l:"小田急/相鉄/JR"}, {n:"藤沢", k:"ふじさわ", l:"JR/小田急"}, {n:"大船", k:"おおふな", l:"JR"},  
-            {n:"小田原", k:"おだわら", l:"JR/小田急"}, {n:"熱海", k:"あたみ", l:"JR"}, {n:"高尾", k:"たかお", l:"JR/京王"},  
-            {n:"調布", k:"ちょうふ", l:"京王"}, {n:"府中", k:"ふちゅう", l:"京王"}, {n:"橋本", k:"はしもと", l:"京王/JR"},  
-            {n:"所沢", k:"ところざわ", l:"西武"}, {n:"練馬", k:"ねりま", l:"西武"}, {n:"高田馬場", k:"たかだのばば", l:"JR/西武"},  
-            {n:"日暮里", k:"にっぽり", l:"JR/京成"}, {n:"押上", k:"おしあげ", l:"メトロ/東武"}, {n:"錦糸町", k:"きんしちょう", l:"JR/メトロ"},  
-            {n:"六本木", k:"ろっぽんぎ", l:"メトロ/都営"}, {n:"銀座", k:"ぎんざ", l:"メトロ"}, {n:"大手町", k:"おおてまち", l:"メトロ/都営"},  
-            {n:"表参道", k:"おもてさんどう", l:"メトロ"}, {n:"目黒", k:"めぐろ", l:"JR/東急/メトロ"}, {n:"恵比寿", k:"えびす", l:"JR/メトロ"},  
-            {n:"蒲田", k:"かまた", l:"JR/東急"}, {n:"川口", k:"かわぐち", l:"JR"}, {n:"戸塚", k:"とつか", l:"JR"},  
-            {n:"菊名", k:"きくな", l:"東急/JR"}, {n:"日吉", k:"ひよし", l:"東急"}, {n:"長津田", k:"ながつた", l:"東急/JR"},  
-            {n:"中央林間", k:"ちゅうおうりんかん", l:"東急/小田急"}, {n:"大井町", k:"おおいまち", l:"JR/東急"}, {n:"五反田", k:"ごたんだ", l:"JR/東急"}  
-        ];  
+        // 変数定義  
+        let ALL_STATIONS = []; // ここに全駅データを読み込む  
+        let homeCoords = null;  
   
-        window.onload = function() {  
-            setNow();   
+        window.onload = async function() {  
+            setNow();  
             loadHomeData();  
+              
+            // ★変更点: 外部JSONファイルを読み込む  
+            await loadStationData();  
+  
+            // クリックでサジェストを閉じる  
             document.addEventListener('click', function(e) {  
                 if (!e.target.closest('.input-row')) {  
                     const s = document.getElementById('startSuggest');  
@@ -145,7 +127,19 @@
             });  
         };  
   
-        // ★新サジェスト機能: 内蔵データから検索  
+        // ★新機能: 駅データの読み込み  
+        async function loadStationData() {  
+            try {  
+                const res = await fetch('data/stations_kanto.json'); // 作成したファイルを指定  
+                ALL_STATIONS = await res.json();  
+                console.log("駅データを読み込みました:", ALL_STATIONS.length + "駅");  
+            } catch (e) {  
+                console.error("駅データの読み込みに失敗:", e);  
+                alert("駅データの読み込みに失敗しました。リロードしてください。");  
+            }  
+        }  
+  
+        // サジェスト機能 (読み込んだ全データから検索)  
         function filterStations(input, listId) {  
             const val = input.value.trim();  
             const list = document.getElementById(listId);  
@@ -155,9 +149,12 @@
                 return;  
             }  
   
-            // ひらがな/漢字でフィルタリング (前方一致)  
-            const hits = PRESET_STATIONS.filter(st => {  
-                return st.n.startsWith(val) || st.k.startsWith(val);  
+            // 前方一致 または 部分一致で検索  
+            // ※HeartRailsデータには「かな」がないので、漢字検索のみになります  
+            // 「しん」と打ってもヒットしないので、「新」と打つ必要があります。  
+            // (かな対応するにはさらに高度なデータ加工が必要ですが、まずはこれで)  
+            const hits = ALL_STATIONS.filter(st => {  
+                return st.n.startsWith(val);  
             });  
   
             if (hits.length === 0) {  
@@ -166,13 +163,13 @@
             }  
   
             list.innerHTML = '';  
-            // 上位5件だけ表示  
-            hits.slice(0, 5).forEach(st => {  
+            // 上位10件表示  
+            hits.slice(0, 10).forEach(st => {  
                 const div = document.createElement('div');  
                 div.className = 'suggest-item';  
                 div.innerHTML = `<span>${st.n}</span> <span class="suggest-line">${st.l}</span>`;  
                 div.onclick = function() {  
-                    input.value = st.n;  
+                    input.value = st.n; // 駅名をセット  
                     list.style.display = 'none';  
                 };  
                 list.appendChild(div);  
@@ -180,7 +177,8 @@
             list.style.display = 'block';  
         }  
   
-        let homeCoords = null;  
+        // ... (以下、setNow, loadHomeData, saveHomeAddress, searchRoute などは変更なし) ...  
+        // ※既存のコードをそのまま残してください  
         function setNow() {  
             const now = new Date();  
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());  
@@ -278,10 +276,9 @@
             data.candidates.slice(0, 5).forEach((route) => {  
                 const card = document.createElement('div');  
                 card.className = 'route-card' + (data.is_target_reachable ? '' : ' limit');  
-                // サーバーが計算した料金があれば使い、なければフォールバック  
-                const taxiPrice = route.taxi_price   
-                    ? route.taxi_price   
-                    : Math.round(route.distance_to_target_km * 350 + 500);    
+                // サーバー計算値を使用  
+                const taxiPrice = route.taxi_price ? route.taxi_price : Math.round(route.distance_to_target_km * 350 + 500);  
+                  
                 const html = `  
                     <div class="card-header">  
                         <div class="station-name">${route.station} <span style="font-size:14px; font-weight:normal">着</span></div>  
@@ -324,5 +321,6 @@
             });  
         }  
     </script>  
+
 </body>  
 </html>  
