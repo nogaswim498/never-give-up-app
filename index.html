@@ -12,7 +12,7 @@
       
     <style>  
         /* === デザイン定義 === */  
-        body { margin: 0; font-family: -apple-system, sans-serif; background-color: #f2f2f2; color: #333; -webkit-tap-highlight-color: transparent; padding-bottom: 120px; }  
+        body { margin: 0; font-family: -apple-system, sans-serif; background-color: #f2f2f2; color: #333; -webkit-tap-highlight-color: transparent; }  
         .header { background-color: #ffffff; padding: 12px; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; height: 44px;}  
         .app-title { font-weight: bold; color: #2ecc71; font-size: 18px; flex-grow: 1; text-align: center; }  
         .settings-icon { font-size: 24px; color: #666; cursor: pointer; padding: 0 15px; }  
@@ -25,11 +25,10 @@
         .search-btn { background-color: #fa8a28; color: white; width: 100%; border: none; padding: 14px; font-size: 18px; font-weight: bold; border-radius: 4px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.2); margin-top: 10px; }  
           
         /* サジェストリスト */  
-        .suggest-list { position: absolute; background: #fff; border: 1px solid #ddd; top: 100%; width: 100%; max-height: 200px; overflow-y: auto; z-index: 1000; display: none; left: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }  
-        .suggest-item { padding: 10px 15px; border-bottom: 1px solid #eee; font-size: 16px; }  
-          
-        /* デバッグコンソール (画面下) */  
-        #debug-console { position: fixed; bottom: 0; left: 0; right: 0; height: 100px; background: rgba(0,0,0,0.85); color: #0f0; font-family: monospace; font-size: 10px; overflow-y: scroll; z-index: 9999; padding: 5px; pointer-events: none; }  
+        .suggest-list { position: absolute; background: #fff; border: 1px solid #ddd; top: 100%; width: 100%; max-height: 250px; overflow-y: auto; z-index: 1000; display: none; left: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;}  
+        .suggest-item { padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }  
+        .suggest-item:active { background: #f5f5f5; }  
+        .suggest-line { font-size: 11px; color: #888; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }  
   
         /* モーダル */  
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; justify-content: center; align-items: center; }  
@@ -39,6 +38,7 @@
         .btn-cancel { background: #eee; color: #333; border: none; padding: 10px 16px; border-radius: 4px; }  
         .btn-save { background: #2ecc71; color: #fff; border: none; padding: 10px 16px; border-radius: 4px; }  
   
+        /* 結果カード */  
         .result-container { padding: 10px; }  
         .route-card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; border-left: 5px solid #2ecc71; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }  
         .route-card.limit { border-left-color: #fa8a28; }  
@@ -53,12 +53,11 @@
         .tl-dot { width: 10px; height: 10px; background: #fff; border: 3px solid #fa8a28; border-radius: 50%; position: absolute; left: -7px; top: 0; }  
         .tl-content { flex: 1; }  
         .dashed { border-left: 2px dashed #999; width: 0; background: none; }  
+        .taxi-info { color: #555; font-size: 13px; background: #f9f9f9; padding: 8px; border-radius: 4px; margin-top: 4px; }  
+        .warning-msg { background-color: #ffebee; color: #d32f2f; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 14px; border: 1px solid #ffcdd2; font-weight: bold;}  
     </style>  
 </head>  
 <body>  
-  
-    <!-- デバッグ用エリア -->  
-    <div id="debug-console">Console Ready...<br></div>  
   
     <div class="header">  
         <div style="width: 40px;"></div>  
@@ -69,13 +68,13 @@
     <div class="search-box">  
         <div class="input-row">  
             <span class="input-label">出発</span>  
-            <!-- ここに oninput を確実に記述 -->  
-            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" oninput="suggestStation(this, 'startSuggest')" autocomplete="off">  
+            <!-- サジェストロジックを変更: 内蔵データを使用 -->  
+            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" oninput="filterStations(this, 'startSuggest')" autocomplete="off">  
             <div id="startSuggest" class="suggest-list"></div>  
         </div>  
         <div class="input-row">  
             <span class="input-label">到着</span>  
-            <input type="text" id="targetStation" class="input-field" placeholder="例: 横浜" oninput="suggestStation(this, 'targetSuggest')" autocomplete="off">  
+            <input type="text" id="targetStation" class="input-field" placeholder="例: 横浜" oninput="filterStations(this, 'targetSuggest')" autocomplete="off">  
             <button class="action-btn home" onclick="useHomeAddress()">🏠 自宅</button>  
             <div id="targetSuggest" class="suggest-list"></div>  
         </div>  
@@ -102,32 +101,40 @@
     </div>  
   
     <script>  
-        // --- デバッグ用ログ関数 ---  
-        function log(msg, isError=false) {  
-            const el = document.getElementById('debug-console');  
-            const color = isError ? 'red' : '#0f0';  
-            el.innerHTML = `<span style="color:${color};">[${new Date().toLocaleTimeString()}] ${msg}</span><br>` + el.innerHTML;  
-            console.log(msg);  
-        }  
-  
-        window.onerror = function(msg, url, line) {  
-            log(`JS Error: ${msg} (Line: ${line})`, true);  
-        };  
-  
+        // Service Worker  
         if ('serviceWorker' in navigator) {  
-            navigator.serviceWorker.register('sw.js').catch(err => log("SW Error: " + err, true));  
+            navigator.serviceWorker.register('sw.js');  
         }  
   
-        // --- 初期化 ---  
-        window.onload = function() {  
-            setNow();  
-            loadHomeData();  
-              
-            // ★ここを変更: 強制的にイベントを登録する  
-            attachInputEvent('startStation', 'startSuggest');  
-            attachInputEvent('targetStation', 'targetSuggest');  
+        // ★関東の主要駅データ (内蔵DB: 名前, 読み, 路線)  
+        // 外部通信しないので爆速かつ確実です  
+        const PRESET_STATIONS = [  
+            {n:"新宿", k:"しんじゅく", l:"JR/小田急/京王"}, {n:"渋谷", k:"しぶや", l:"JR/東急/京王"}, {n:"池袋", k:"いけぶくろ", l:"JR/西武/東武"},  
+            {n:"東京", k:"とうきょう", l:"JR/メトロ"}, {n:"品川", k:"しながわ", l:"JR/京急"}, {n:"横浜", k:"よこはま", l:"JR/東急/相鉄"},  
+            {n:"上野", k:"うえの", l:"JR/メトロ"}, {n:"秋葉原", k:"あきはばら", l:"JR/つくば"}, {n:"新橋", k:"しんばし", l:"JR/メトロ"},  
+            {n:"大宮", k:"おおみや", l:"JR/東武"}, {n:"川崎", k:"かわさき", l:"JR/京急"}, {n:"船橋", k:"ふなばし", l:"JR/東武"},  
+            {n:"立川", k:"たちかわ", l:"JR"}, {n:"八王子", k:"はちおうじ", l:"JR/京王"}, {n:"吉祥寺", k:"きちじょうじ", l:"JR/京王"},  
+            {n:"中野", k:"なかの", l:"JR/メトロ"}, {n:"三鷹", k:"みたか", l:"JR"}, {n:"町田", k:"まちだ", l:"JR/小田急"},  
+            {n:"北千住", k:"きたせんじゅ", l:"JR/東武/メトロ"}, {n:"西船橋", k:"にしふなばし", l:"JR/メトロ"}, {n:"柏", k:"かしわ", l:"JR/東武"},  
+            {n:"津田沼", k:"つだぬま", l:"JR"}, {n:"千葉", k:"ちば", l:"JR/モノレール"}, {n:"松戸", k:"まつど", l:"JR"},  
+            {n:"浦和", k:"うらわ", l:"JR"}, {n:"赤羽", k:"あかばね", l:"JR"}, {n:"武蔵小杉", k:"むさしこすぎ", l:"JR/東急"},  
+            {n:"自由が丘", k:"じゆうがおか", l:"東急"}, {n:"中目黒", k:"なかめぐろ", l:"東急/メトロ"}, {n:"二子玉川", k:"ふたこたまがわ", l:"東急"},  
+            {n:"溝の口", k:"みぞのくち", l:"東急/JR"}, {n:"登戸", k:"のぼりと", l:"小田急/JR"}, {n:"新百合ヶ丘", k:"しんゆりがおか", l:"小田急"},  
+            {n:"海老名", k:"えびな", l:"小田急/相鉄/JR"}, {n:"藤沢", k:"ふじさわ", l:"JR/小田急"}, {n:"大船", k:"おおふな", l:"JR"},  
+            {n:"小田原", k:"おだわら", l:"JR/小田急"}, {n:"熱海", k:"あたみ", l:"JR"}, {n:"高尾", k:"たかお", l:"JR/京王"},  
+            {n:"調布", k:"ちょうふ", l:"京王"}, {n:"府中", k:"ふちゅう", l:"京王"}, {n:"橋本", k:"はしもと", l:"京王/JR"},  
+            {n:"所沢", k:"ところざわ", l:"西武"}, {n:"練馬", k:"ねりま", l:"西武"}, {n:"高田馬場", k:"たかだのばば", l:"JR/西武"},  
+            {n:"日暮里", k:"にっぽり", l:"JR/京成"}, {n:"押上", k:"おしあげ", l:"メトロ/東武"}, {n:"錦糸町", k:"きんしちょう", l:"JR/メトロ"},  
+            {n:"六本木", k:"ろっぽんぎ", l:"メトロ/都営"}, {n:"銀座", k:"ぎんざ", l:"メトロ"}, {n:"大手町", k:"おおてまち", l:"メトロ/都営"},  
+            {n:"表参道", k:"おもてさんどう", l:"メトロ"}, {n:"目黒", k:"めぐろ", l:"JR/東急/メトロ"}, {n:"恵比寿", k:"えびす", l:"JR/メトロ"},  
+            {n:"蒲田", k:"かまた", l:"JR/東急"}, {n:"川口", k:"かわぐち", l:"JR"}, {n:"戸塚", k:"とつか", l:"JR"},  
+            {n:"菊名", k:"きくな", l:"東急/JR"}, {n:"日吉", k:"ひよし", l:"東急"}, {n:"長津田", k:"ながつた", l:"東急/JR"},  
+            {n:"中央林間", k:"ちゅうおうりんかん", l:"東急/小田急"}, {n:"大井町", k:"おおいまち", l:"JR/東急"}, {n:"五反田", k:"ごたんだ", l:"JR/東急"}  
+        ];  
   
-            // 画面タップで閉じる  
+        window.onload = function() {  
+            setNow();   
+            loadHomeData();  
             document.addEventListener('click', function(e) {  
                 if (!e.target.closest('.input-row')) {  
                     const s = document.getElementById('startSuggest');  
@@ -136,122 +143,55 @@
                     if(t) t.style.display = 'none';  
                 }  
             });  
-            log("System Ready. Event Listeners Attached.");  
         };  
   
-        // ★新機能: 入力監視を確実に行う関数  
-        function attachInputEvent(inputId, listId) {  
-            const el = document.getElementById(inputId);  
-            if(!el) {  
-                log("Error: Input element not found " + inputId, true);  
+        // ★新サジェスト機能: 内蔵データから検索  
+        function filterStations(input, listId) {  
+            const val = input.value.trim();  
+            const list = document.getElementById(listId);  
+  
+            if (val.length < 1) {  
+                list.style.display = 'none';  
                 return;  
             }  
   
-            // 文字が入るたびに実行  
-            el.addEventListener('input', function() {  
-                suggestStation(this, listId);  
+            // ひらがな/漢字でフィルタリング (前方一致)  
+            const hits = PRESET_STATIONS.filter(st => {  
+                return st.n.startsWith(val) || st.k.startsWith(val);  
             });  
-            // 日本語変換が確定したときにも実行（念のため）  
-            el.addEventListener('compositionend', function() {  
-                suggestStation(this, listId);  
+  
+            if (hits.length === 0) {  
+                list.style.display = 'none';  
+                return;  
+            }  
+  
+            list.innerHTML = '';  
+            // 上位5件だけ表示  
+            hits.slice(0, 5).forEach(st => {  
+                const div = document.createElement('div');  
+                div.className = 'suggest-item';  
+                div.innerHTML = `<span>${st.n}</span> <span class="suggest-line">${st.l}</span>`;  
+                div.onclick = function() {  
+                    input.value = st.n;  
+                    list.style.display = 'none';  
+                };  
+                list.appendChild(div);  
             });  
+            list.style.display = 'block';  
         }  
   
         let homeCoords = null;  
-  
         function setNow() {  
             const now = new Date();  
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());  
             document.getElementById('searchDateTime').value = now.toISOString().slice(0, 16);  
         }  
-  
         function loadHomeData() {  
             const homeData = JSON.parse(localStorage.getItem('never_home_v1') || '{}');  
             if (homeData.is_registered) {  
                 homeCoords = { lat: homeData.lat, lon: homeData.lon, address: homeData.address };  
-                log("Home data loaded.");  
             }  
         }  
-  
-        // --- サジェスト機能 (JSONP) ---  
-        let suggestTimer = null;  
-        let currentListId = null;  
-        let currentInputId = null;  
-  
-        function suggestStation(inputElement, listId) {  
-            const keyword = inputElement.value;  
-              
-            // ★ログに出す  
-            log("入力検知: " + keyword);  
-  
-            const listElement = document.getElementById(listId);  
-  
-            if (keyword.length < 1) { // 1文字でも反応するように変更  
-                listElement.style.display = 'none';  
-                return;  
-            }  
-  
-            clearTimeout(suggestTimer);  
-            suggestTimer = setTimeout(() => {  
-                currentListId = listId;  
-                currentInputId = inputElement.id;  
-                  
-                log("通信開始: " + keyword);  
-  
-                const oldScript = document.getElementById('jsonp_script');  
-                if (oldScript) oldScript.remove();  
-  
-                const script = document.createElement('script');  
-                script.id = 'jsonp_script';  
-                script.src = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}&jsonp=receiveStations`;  
-                  
-                script.onerror = function() {  
-                    log("Network Error: API Blocked", true);  
-                };  
-  
-                document.body.appendChild(script);  
-            }, 300); // 0.3秒待機  
-        }  
-  
-        // コールバック  
-        window.receiveStations = function(data) {  
-            log("データ受信成功");  
-            const listElement = document.getElementById(currentListId);  
-            const inputElement = document.getElementById(currentInputId);  
-              
-            if (!listElement || !inputElement) return;  
-  
-            if (data.response && data.response.station) {  
-                renderSuggestList(data.response.station, listElement, inputElement);  
-            } else {  
-                listElement.style.display = 'none';  
-                log("該当駅なし");  
-            }  
-        };  
-  
-        function renderSuggestList(stations, listElement, inputElement) {  
-            listElement.innerHTML = '';  
-            const seen = new Set();  
-              
-            stations.forEach(st => {  
-                const uniqueKey = st.name + st.line;  
-                if (seen.has(uniqueKey)) return;  
-                seen.add(uniqueKey);  
-  
-                const div = document.createElement('div');  
-                div.className = 'suggest-item';  
-                div.innerHTML = `${st.name} <span style="font-size:10px; color:#999;">(${st.line})</span>`;  
-                  
-                div.onclick = function() {  
-                    inputElement.value = st.name;  
-                    listElement.style.display = 'none';  
-                };  
-                listElement.appendChild(div);  
-            });  
-            listElement.style.display = 'block';  
-        }  
-  
-        // --- 設定・自宅登録 ---  
         function openSettings() {  
             document.getElementById('settingsModal').style.display = 'flex';  
             if(homeCoords) { document.getElementById('addressInput').value = homeCoords.address; }  
@@ -281,7 +221,6 @@
                     document.getElementById('addressResult').innerText = "⚠️ 住所なし";  
                 }  
             } catch (e) {  
-                log("Address Error: " + e, true);  
                 document.getElementById('addressResult').innerText = "通信エラー";  
             }  
         }  
@@ -289,15 +228,11 @@
             if (homeCoords) { document.getElementById('targetStation').value = "自宅"; }   
             else { alert("右上の⚙️設定ボタンから、自宅の住所を登録してください。"); openSettings(); }  
         }  
-  
-        // --- 検索処理 ---  
         async function searchRoute() {  
             const start = document.getElementById('startStation').value;  
             const targetInput = document.getElementById('targetStation').value;  
             const rawDateStr = document.getElementById('searchDateTime').value;  
-  
             if (!rawDateStr) { alert("日時を入力してください"); return; }  
-              
             const dateObj = new Date(rawDateStr);  
             let serviceHour = dateObj.getHours();  
             let serviceMinute = dateObj.getMinutes();  
@@ -305,28 +240,17 @@
             const mm = serviceMinute < 10 ? '0' + serviceMinute : serviceMinute;  
             const timeStr = `${serviceHour}:${mm}`;  
             const resultArea = document.getElementById('resultArea');  
-  
             const payload = {  
-                start_station: start,  
-                target_station: targetInput,  
-                current_time: timeStr,  
-                target_lat: null,  
-                target_lon: null  
+                start_station: start, target_station: targetInput, current_time: timeStr, target_lat: null, target_lon: null  
             };  
-  
             if (targetInput.includes("自宅") && homeCoords) {  
-                payload.target_lat = homeCoords.lat;  
-                payload.target_lon = homeCoords.lon;  
+                payload.target_lat = homeCoords.lat; payload.target_lon = homeCoords.lon;  
             }  
-  
             resultArea.style.display = 'block';  
             resultArea.innerHTML = '<div style="text-align:center; padding:20px;">検索中...</div>';  
-  
             try {  
                 const response = await fetch('/search', {  
-                    method: 'POST',  
-                    headers: { 'Content-Type': 'application/json' },  
-                    body: JSON.stringify(payload)  
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)  
                 });  
                 const data = await response.json();  
                 if (data.status === 'error') {  
@@ -335,11 +259,9 @@
                     renderResults(data);  
                 }  
             } catch (error) {  
-                log("Search Error: " + error, true);  
                 resultArea.innerHTML = '<div style="color:red; padding:20px;">通信エラー</div>';  
             }  
         }  
-  
         function renderResults(data) {  
             const container = document.getElementById('resultArea');  
             container.innerHTML = '';  
@@ -399,6 +321,5 @@
             });  
         }  
     </script>  
-    
 </body>  
 </html>  
