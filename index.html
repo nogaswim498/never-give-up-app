@@ -148,13 +148,12 @@
         <div class="input-row">  
             <span class="input-label">出発</span>  
             <!-- サジェスト機能を追加: onkeyupイベント -->  
-            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" onkeyup="suggestStation(this, 'startSuggest')" autocomplete="off">  
-            <!-- 候補リストを表示するコンテナ -->  
+            <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" oninput="suggestStation(this, 'startSuggest')" autocomplete="off">              <!-- 候補リストを表示するコンテナ -->  
             <div id="startSuggest" class="suggest-list"></div>  
         </div>  
         <div class="input-row">  
             <span class="input-label">到着</span>  
-            <input type="text" id="targetStation" class="input-field" placeholder="例: 横浜" onkeyup="suggestStation(this, 'targetSuggest')" autocomplete="off">  
+            <input type="text" id="targetStation" class="input-field" placeholder="例: 横浜" oninput="suggestStation(this, 'targetSuggest')" autocomplete="off">  
             <button class="action-btn home" onclick="useHomeAddress()">🏠 自宅</button>  
             <div id="targetSuggest" class="suggest-list"></div>  
         </div>  
