@@ -12,7 +12,7 @@
       
     <style>  
         /* === デザイン定義 === */  
-        body { margin: 0; font-family: -apple-system, sans-serif; background-color: #f2f2f2; color: #333; -webkit-tap-highlight-color: transparent; }  
+        body { margin: 0; font-family: -apple-system, sans-serif; background-color: #f2f2f2; color: #333; -webkit-tap-highlight-color: transparent; padding-bottom: 50px;}  
         .header { background-color: #ffffff; padding: 12px; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 100; display: flex; justify-content: space-between; align-items: center; height: 44px;}  
         .app-title { font-weight: bold; color: #2ecc71; font-size: 18px; flex-grow: 1; text-align: center; }  
         .settings-icon { font-size: 24px; color: #666; cursor: pointer; padding: 0 15px; }  
@@ -26,9 +26,9 @@
           
         /* サジェストリスト */  
         .suggest-list { position: absolute; background: #fff; border: 1px solid #ddd; top: 100%; width: 100%; max-height: 250px; overflow-y: auto; z-index: 1000; display: none; left: 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;}  
-        .suggest-item { padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }  
+        .suggest-item { padding: 12px 15px; border-bottom: 1px solid #eee; font-size: 16px; display: flex; flex-direction: column; }  
         .suggest-item:active { background: #f5f5f5; }  
-        .suggest-line { font-size: 11px; color: #888; background: #f0f0f0; padding: 2px 6px; border-radius: 4px; }  
+        .suggest-line { font-size: 10px; color: #888; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }  
   
         /* モーダル */  
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; justify-content: center; align-items: center; }  
@@ -68,7 +68,6 @@
     <div class="search-box">  
         <div class="input-row">  
             <span class="input-label">出発</span>  
-            <!-- サジェストロジックを変更: 内蔵データを使用 -->  
             <input type="text" id="startStation" class="input-field" placeholder="例: 新宿" oninput="filterStations(this, 'startSuggest')" autocomplete="off">  
             <div id="startSuggest" class="suggest-list"></div>  
         </div>  
@@ -105,18 +104,13 @@
             navigator.serviceWorker.register('sw.js');  
         }  
   
-        // 変数定義  
-        let ALL_STATIONS = []; // ここに全駅データを読み込む  
+        let ALL_STATIONS = [];  
         let homeCoords = null;  
   
         window.onload = async function() {  
             setNow();  
             loadHomeData();  
-              
-            // ★変更点: 外部JSONファイルを読み込む  
             await loadStationData();  
-  
-            // クリックでサジェストを閉じる  
             document.addEventListener('click', function(e) {  
                 if (!e.target.closest('.input-row')) {  
                     const s = document.getElementById('startSuggest');  
@@ -127,19 +121,16 @@
             });  
         };  
   
-        // ★新機能: 駅データの読み込み  
         async function loadStationData() {  
             try {  
-                const res = await fetch('data/stations_kanto.json'); // 作成したファイルを指定  
+                const res = await fetch('data/stations_kanto.json');  
                 ALL_STATIONS = await res.json();  
-                console.log("駅データを読み込みました:", ALL_STATIONS.length + "駅");  
             } catch (e) {  
                 console.error("駅データの読み込みに失敗:", e);  
-                alert("駅データの読み込みに失敗しました。リロードしてください。");  
             }  
         }  
   
-        // サジェスト機能 (読み込んだ全データから検索)  
+        // ★修正: 駅名を名寄せして表示  
         function filterStations(input, listId) {  
             const val = input.value.trim();  
             const list = document.getElementById(listId);  
@@ -149,36 +140,49 @@
                 return;  
             }  
   
-            // 前方一致 または 部分一致で検索  
-            // ※HeartRailsデータには「かな」がないので、漢字検索のみになります  
-            // 「しん」と打ってもヒットしないので、「新」と打つ必要があります。  
-            // (かな対応するにはさらに高度なデータ加工が必要ですが、まずはこれで)  
-            const hits = ALL_STATIONS.filter(st => {  
-                return st.n.startsWith(val);  
-            });  
+            // 前方一致  
+            const hits = ALL_STATIONS.filter(st => st.n.startsWith(val));  
   
             if (hits.length === 0) {  
                 list.style.display = 'none';  
                 return;  
             }  
   
+            // 名寄せロジック (同じ駅名なら路線を結合する)  
+            const grouped = {};  
+            hits.forEach(st => {  
+                if (!grouped[st.n]) {  
+                    grouped[st.n] = [];  
+                }  
+                // 路線名が重複しないように追加  
+                if (!grouped[st.n].includes(st.l)) {  
+                    grouped[st.n].push(st.l);  
+                }  
+            });  
+  
             list.innerHTML = '';  
-            // 上位10件表示  
-            hits.slice(0, 10).forEach(st => {  
+              
+            // 上位10件を表示  
+            let count = 0;  
+            for (const [name, lines] of Object.entries(grouped)) {  
+                if (count >= 10) break;  
+                  
                 const div = document.createElement('div');  
                 div.className = 'suggest-item';  
-                div.innerHTML = `<span>${st.n}</span> <span class="suggest-line">${st.l}</span>`;  
+                // 路線名をスラッシュ区切りで表示  
+                const lineStr = lines.join(' / ');  
+                div.innerHTML = `<span>${name}</span> <span class="suggest-line">${lineStr}</span>`;  
+                  
                 div.onclick = function() {  
-                    input.value = st.n; // 駅名をセット  
+                    input.value = name;  
                     list.style.display = 'none';  
                 };  
                 list.appendChild(div);  
-            });  
+                count++;  
+            }  
             list.style.display = 'block';  
         }  
   
-        // ... (以下、setNow, loadHomeData, saveHomeAddress, searchRoute などは変更なし) ...  
-        // ※既存のコードをそのまま残してください  
         function setNow() {  
             const now = new Date();  
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());  
@@ -226,6 +230,7 @@
             if (homeCoords) { document.getElementById('targetStation').value = "自宅"; }   
             else { alert("右上の⚙️設定ボタンから、自宅の住所を登録してください。"); openSettings(); }  
         }  
+  
         async function searchRoute() {  
             const start = document.getElementById('startStation').value;  
             const targetInput = document.getElementById('targetStation').value;  
@@ -260,6 +265,7 @@
                 resultArea.innerHTML = '<div style="color:red; padding:20px;">通信エラー</div>';  
             }  
         }  
+  
         function renderResults(data) {  
             const container = document.getElementById('resultArea');  
             container.innerHTML = '';  
@@ -276,51 +282,82 @@
             data.candidates.slice(0, 5).forEach((route) => {  
                 const card = document.createElement('div');  
                 card.className = 'route-card' + (data.is_target_reachable ? '' : ' limit');  
-                // サーバー計算値を使用  
                 const taxiPrice = route.taxi_price ? route.taxi_price : Math.round(route.distance_to_target_km * 350 + 500);  
+  
+                // ★修正: 出発地から直接タクシーの場合 (移動0分 = 出発時刻と到着時刻が同じ)  
+                const isDirectTaxi = (route.station === data.search_condition.start);  
                   
-                const html = `  
-                    <div class="card-header">  
-                        <div class="station-name">${route.station} <span style="font-size:14px; font-weight:normal">着</span></div>  
-                        <div class="arrival-time">${route.arrival_time}</div>  
-                    </div>  
-                    <div class="info-row">  
-                        <span class="badge" style="background:#fff3e0; color:#e65100">残り ${route.distance_to_target_km} km</span>  
-                        <span class="badge">乗換 ${route.route_count - 1}回</span>  
-                    </div>  
-                    <div class="timeline">  
-                        <div class="tl-item">  
-                            <div class="tl-time">${data.search_condition.time}</div>  
-                            <div class="tl-line"><div class="tl-dot"></div></div>  
-                            <div class="tl-content">${data.search_condition.start}</div>  
-                        </div>  
-                        <div class="tl-item">  
-                            <div class="tl-time">↓</div>  
-                            <div class="tl-line"></div>  
-                            <div class="tl-content" style="color:#888; font-size:12px;">(電車)</div>  
-                        </div>  
-                        <div class="tl-item">  
-                            <div class="tl-time">${route.arrival_time}</div>  
-                            <div class="tl-line"><div class="tl-dot"></div></div>  
-                            <div class="tl-content"><strong>${route.station}</strong></div>  
-                        </div>  
-                        <div class="tl-item">  
-                            <div class="tl-time"></div>  
-                            <div class="tl-line dashed"></div>  
-                            <div class="tl-content">  
-                                <div class="taxi-info">  
-                                    🚕 ここからはタクシー<br>  
-                                    予想: 約${taxiPrice.toLocaleString()}円<br>  
+                let timelineHtml = '';  
+  
+                if (isDirectTaxi) {  
+                    // 電車部分をカットしてタクシーのみ表示  
+                    timelineHtml = `  
+                        <div class="timeline">  
+                            <div class="tl-item">  
+                                <div class="tl-time">${data.search_condition.time}</div>  
+                                <div class="tl-line"><div class="tl-dot"></div></div>  
+                                <div class="tl-content"><strong>${data.search_condition.start}</strong> (現在地)</div>  
+                            </div>  
+                            <div class="tl-item">  
+                                <div class="tl-time"></div>  
+                                <div class="tl-line dashed"></div>  
+                                <div class="tl-content">  
+                                    <div class="taxi-info">  
+                                        🚕 いきなりタクシー<br>  
+                                        予想: 約${taxiPrice.toLocaleString()}円<br>  
+                                    </div>  
                                 </div>  
                             </div>  
                         </div>  
+                    `;  
+                } else {  
+                    // 通常の電車+タクシー表示  
+                    timelineHtml = `  
+                        <div class="timeline">  
+                            <div class="tl-item">  
+                                <div class="tl-time">${data.search_condition.time}</div>  
+                                <div class="tl-line"><div class="tl-dot"></div></div>  
+                                <div class="tl-content">${data.search_condition.start}</div>  
+                            </div>  
+                            <div class="tl-item">  
+                                <div class="tl-time">↓</div>  
+                                <div class="tl-line"></div>  
+                                <div class="tl-content" style="color:#888; font-size:12px;">(電車)</div>  
+                            </div>  
+                            <div class="tl-item">  
+                                <div class="tl-time">${route.arrival_time}</div>  
+                                <div class="tl-line"><div class="tl-dot"></div></div>  
+                                <div class="tl-content"><strong>${route.station}</strong></div>  
+                            </div>  
+                            <div class="tl-item">  
+                                <div class="tl-time"></div>  
+                                <div class="tl-line dashed"></div>  
+                                <div class="tl-content">  
+                                    <div class="taxi-info">  
+                                        🚕 ここからはタクシー<br>  
+                                        予想: 約${taxiPrice.toLocaleString()}円<br>  
+                                    </div>  
+                                </div>  
+                            </div>  
+                        </div>  
+                    `;  
+                }  
+  
+                const html = `  
+                    <div class="card-header">  
+                        <div class="station-name">${route.station} <span style="font-size:14px; font-weight:normal">着</span></div>  
+                        <div class="arrival-time">${isDirectTaxi ? data.search_condition.time : route.arrival_time}</div>  
                     </div>  
+                    <div class="info-row">  
+                        <span class="badge" style="background:#fff3e0; color:#e65100">残り ${route.distance_to_target_km} km</span>  
+                        ${isDirectTaxi ? '<span class="badge">乗換なし</span>' : `<span class="badge">乗換 ${route.route_count - 1}回</span>`}  
+                    </div>  
+                    ${timelineHtml}  
                 `;  
                 card.innerHTML = html;  
                 container.appendChild(card);  
             });  
         }  
     </script>  
-
 </body>  
 </html>  
