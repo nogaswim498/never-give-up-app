@@ -106,24 +106,28 @@
         function log(msg, isError=false) {  
             const el = document.getElementById('debug-console');  
             const color = isError ? 'red' : '#0f0';  
-            el.innerHTML += `<span style="color:${color};">[${new Date().toLocaleTimeString()}] ${msg}</span><br>`;  
-            el.scrollTop = el.scrollHeight;  
+            el.innerHTML = `<span style="color:${color};">[${new Date().toLocaleTimeString()}] ${msg}</span><br>` + el.innerHTML;  
             console.log(msg);  
         }  
   
-        // JSエラーを画面に出す  
         window.onerror = function(msg, url, line) {  
             log(`JS Error: ${msg} (Line: ${line})`, true);  
         };  
   
-        // Service Worker  
         if ('serviceWorker' in navigator) {  
             navigator.serviceWorker.register('sw.js').catch(err => log("SW Error: " + err, true));  
         }  
   
+        // --- 初期化 ---  
         window.onload = function() {  
             setNow();  
             loadHomeData();  
+              
+            // ★ここを変更: 強制的にイベントを登録する  
+            attachInputEvent('startStation', 'startSuggest');  
+            attachInputEvent('targetStation', 'targetSuggest');  
+  
+            // 画面タップで閉じる  
             document.addEventListener('click', function(e) {  
                 if (!e.target.closest('.input-row')) {  
                     const s = document.getElementById('startSuggest');  
@@ -132,8 +136,26 @@
                     if(t) t.style.display = 'none';  
                 }  
             });  
-            log("App Loaded. Input event is ready.");  
+            log("System Ready. Event Listeners Attached.");  
         };  
+  
+        // ★新機能: 入力監視を確実に行う関数  
+        function attachInputEvent(inputId, listId) {  
+            const el = document.getElementById(inputId);  
+            if(!el) {  
+                log("Error: Input element not found " + inputId, true);  
+                return;  
+            }  
+  
+            // 文字が入るたびに実行  
+            el.addEventListener('input', function() {  
+                suggestStation(this, listId);  
+            });  
+            // 日本語変換が確定したときにも実行（念のため）  
+            el.addEventListener('compositionend', function() {  
+                suggestStation(this, listId);  
+            });  
+        }  
   
         let homeCoords = null;  
   
@@ -158,11 +180,13 @@
   
         function suggestStation(inputElement, listId) {  
             const keyword = inputElement.value;  
-            // log("Input: " + keyword); // 入力検知ログ  
+              
+            // ★ログに出す  
+            log("入力検知: " + keyword);  
   
             const listElement = document.getElementById(listId);  
   
-            if (keyword.length < 2) {  
+            if (keyword.length < 1) { // 1文字でも反応するように変更  
                 listElement.style.display = 'none';  
                 return;  
             }  
@@ -172,27 +196,26 @@
                 currentListId = listId;  
                 currentInputId = inputElement.id;  
                   
-                // log("Fetching: " + keyword);  
+                log("通信開始: " + keyword);  
   
                 const oldScript = document.getElementById('jsonp_script');  
                 if (oldScript) oldScript.remove();  
   
                 const script = document.createElement('script');  
                 script.id = 'jsonp_script';  
-                // JSONP呼び出し  
                 script.src = `https://express.heartrails.com/api/json?method=getStations&name=${encodeURIComponent(keyword)}&jsonp=receiveStations`;  
                   
                 script.onerror = function() {  
-                    log("Network Error: HeartRails API blocked.", true);  
+                    log("Network Error: API Blocked", true);  
                 };  
   
                 document.body.appendChild(script);  
-            }, 500);  
+            }, 300); // 0.3秒待機  
         }  
   
-        // コールバック関数  
+        // コールバック  
         window.receiveStations = function(data) {  
-            // log("Data received!");  
+            log("データ受信成功");  
             const listElement = document.getElementById(currentListId);  
             const inputElement = document.getElementById(currentInputId);  
               
@@ -202,7 +225,7 @@
                 renderSuggestList(data.response.station, listElement, inputElement);  
             } else {  
                 listElement.style.display = 'none';  
-                // log("No stations found.");  
+                log("該当駅なし");  
             }  
         };  
   
@@ -376,5 +399,6 @@
             });  
         }  
     </script>  
+    
 </body>  
 </html>  
